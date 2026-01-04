@@ -1005,6 +1005,9 @@ async def respond_to_request(request_id: str, current_player: dict = Depends(get
     }
     await db.responses.insert_one(response_doc)
     
+    # Remove _id from response
+    response_doc.pop('_id', None)
+    
     return response_doc
 
 @api_router.put("/requests/{request_id}/responses/{response_id}")
