@@ -322,8 +322,9 @@ async def register(data: PlayerCreate):
     # Create token
     token = create_token(player_id)
     
-    # Remove password_hash from response
-    del player_doc['password_hash']
+    # Remove password_hash and _id from response
+    player_doc.pop('password_hash', None)
+    player_doc.pop('_id', None)
     
     return TokenResponse(access_token=token, player=player_doc)
 
