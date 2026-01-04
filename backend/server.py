@@ -463,6 +463,9 @@ async def create_crew(data: CrewCreate, current_player: dict = Depends(get_curre
     }
     await db.crew_members.insert_one(member_doc)
     
+    # Remove _id from response
+    crew_doc.pop('_id', None)
+    
     crew_doc['member_count'] = 1
     crew_doc['is_member'] = True
     crew_doc['is_creator'] = True
