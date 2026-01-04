@@ -1111,6 +1111,9 @@ async def create_availability(data: AvailabilityCreate, current_player: dict = D
     
     await db.availability_posts.insert_one(post_doc)
     
+    # Remove _id from response
+    post_doc.pop('_id', None)
+    
     return post_doc
 
 @api_router.delete("/availability/{post_id}")
