@@ -768,6 +768,9 @@ async def create_request(data: RequestCreate, current_player: dict = Depends(get
     
     await db.requests.insert_one(request_doc)
     
+    # Remove _id from response
+    request_doc.pop('_id', None)
+    
     # Send notifications to target audience
     await notify_request_audience(request_doc, current_player)
     
