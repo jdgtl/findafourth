@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install -r backend/requirements.txt
+          pip install pip-audit
+
+      - name: Security audit (pip-audit)
+        run: pip-audit --strict --ignore-vuln GHSA-xxxx || echo "::warning::Vulnerabilities found"
+        continue-on-error: true
+
+      - name: Syntax check
+        run: python -m py_compile backend/server.py
+
+      - name: Import check
+        run: |
+          cd backend
+          python -c "import server"
+        env:
+          MONGO_URL: mongodb://localhost:27017
+          JWT_SECRET: test-secret-for-ci
+          CORS_ORIGINS: http://localhost:3000
+
+  frontend:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Security audit (npm audit)
+        run: npm audit --audit-level=high || echo "::warning::Vulnerabilities found"
+        continue-on-error: true
+
+      - name: Build
+        run: npm run build
+        env:
+          CI: true
+
+  security-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'  # Don't fail on vulnerabilities, just report

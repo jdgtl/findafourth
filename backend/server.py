@@ -1,9 +1,13 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Request, Response
 from fastapi import Path as PathParam
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import os
 import logging
 from pathlib import Path
@@ -47,6 +51,33 @@ api_router = APIRouter(prefix="/api")
 
 # Security
 security = HTTPBearer()
+
+# Rate Limiting Configuration
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Security Headers Middleware
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses."""
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        return response
+
+# Request ID Middleware
+class RequestIdMiddleware(BaseHTTPMiddleware):
+    """Add request ID to all requests for tracing."""
+    async def dispatch(self, request: Request, call_next):
+        request_id = str(uuid.uuid4())
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
 
 # Configure logging
 logging.basicConfig(
@@ -411,7 +442,8 @@ async def notify_player(player: dict, title: str, body: str):
 # ==================== AUTH ROUTES ====================
 
 @api_router.post("/auth/register", response_model=TokenResponse)
-async def register(data: PlayerCreate):
+@limiter.limit("10/minute")
+async def register(request: Request, data: PlayerCreate):
     # Check if email already exists
     existing = await db.players.find_one({"email": data.email})
     if existing:
@@ -449,7 +481,8 @@ async def register(data: PlayerCreate):
     return TokenResponse(access_token=token, player=player_doc)
 
 @api_router.post("/auth/login", response_model=TokenResponse)
-async def login(data: LoginRequest):
+@limiter.limit("10/minute")
+async def login(request: Request, data: LoginRequest):
     player = await db.players.find_one({"email": data.email})
     if not player:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -1370,6 +1403,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add security middleware
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestIdMiddleware)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
