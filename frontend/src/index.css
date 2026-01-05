@@ -134,9 +134,13 @@ code {
     background: hsl(var(--muted-foreground) / 0.5);
 }
 
-/* Mobile touch targets */
+/* Mobile touch targets - only for primary interactive elements */
 @media (max-width: 768px) {
-    button, a, input, select, textarea {
+    button:not([role="checkbox"]):not([role="switch"]):not([data-radix-collection-item]),
+    a:not(.inline-link),
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea {
         min-height: 44px;
     }
 }
