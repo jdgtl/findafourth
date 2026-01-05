@@ -12,8 +12,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Slider } from '@/components/ui/slider';
-import { Loader2, ArrowLeft, Info } from 'lucide-react';
-import { format } from 'date-fns';
+import { Loader2, ArrowLeft, Info, ChevronLeft, ChevronRight } from 'lucide-react';
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isBefore, startOfDay } from 'date-fns';
 
 const CreateRequest = () => {
   const navigate = useNavigate();
@@ -21,7 +21,8 @@ const CreateRequest = () => {
   const { player } = useAuth();
 
   // Form state
-  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [time, setTime] = useState('19:00');
   const [club, setClub] = useState(location.state?.club || player?.home_club || '');
   const [court, setCourt] = useState('');
@@ -35,7 +36,6 @@ const CreateRequest = () => {
 
   // Data state
   const [crews, setCrews] = useState([]);
-  const [clubSuggestions, setClubSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -60,14 +60,9 @@ const CreateRequest = () => {
 
   const loadData = async () => {
     try {
-      const [crewsRes, clubsRes] = await Promise.all([
-        crewAPI.list(),
-        utilityAPI.getClubSuggestions(),
-      ]);
+      const crewsRes = await crewAPI.list();
       const myCrews = crewsRes.data.filter((c) => c.is_member);
       setCrews(myCrews);
-      setClubSuggestions(clubsRes.data);
-      // Select all crews by default
       setSelectedCrews(myCrews.map((c) => c.id));
     } catch (err) {
       console.error('Failed to load data:', err);
@@ -90,7 +85,8 @@ const CreateRequest = () => {
     }
 
     // Create datetime
-    const dateTime = new Date(`${date}T${time}:00`);
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const dateTime = new Date(`${dateStr}T${time}:00`);
     if (dateTime <= new Date()) {
       setError('Date and time must be in the future');
       return;
@@ -119,6 +115,22 @@ const CreateRequest = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Calendar helper functions
+  const getDaysInMonth = () => {
+    const start = startOfMonth(calendarMonth);
+    const end = endOfMonth(calendarMonth);
+    return eachDayOfInterval({ start, end });
+  };
+
+  const getStartPadding = () => {
+    const start = startOfMonth(calendarMonth);
+    return start.getDay(); // 0 = Sunday
+  };
+
+  const isDateDisabled = (date) => {
+    return isBefore(date, startOfDay(new Date()));
   };
 
   return (
@@ -150,57 +162,117 @@ const CreateRequest = () => {
               <div className="space-y-4">
                 <h3 className="font-semibold text-gray-900 dark:text-white">When & Where</h3>
                 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="date">Date</Label>
-                    <Input
-                      id="date"
-                      type="date"
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
-                      min={format(new Date(), 'yyyy-MM-dd')}
-                      required
-                      className="h-12 text-base"
-                      data-testid="date-input"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="time">Time</Label>
-                    <select
-                      id="time"
-                      value={time}
-                      onChange={(e) => setTime(e.target.value)}
-                      className="w-full h-12 px-3 text-base border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
-                      data-testid="time-input"
-                    >
-                      {timeOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
+                {/* Custom Calendar */}
+                <div className="space-y-2">
+                  <Label>Date</Label>
+                  <div className="border rounded-lg p-4 bg-white dark:bg-gray-800">
+                    {/* Month Navigation */}
+                    <div className="flex items-center justify-between mb-4">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setCalendarMonth(subMonths(calendarMonth, 1))}
+                        className="h-10 w-10 p-0"
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                      </Button>
+                      <span className="font-semibold text-lg">
+                        {format(calendarMonth, 'MMMM yyyy')}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setCalendarMonth(addMonths(calendarMonth, 1))}
+                        className="h-10 w-10 p-0"
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </Button>
+                    </div>
+                    
+                    {/* Day Headers */}
+                    <div className="grid grid-cols-7 gap-1 mb-2">
+                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
+                        <div key={i} className="text-center text-sm font-medium text-gray-500 py-2">
+                          {day}
+                        </div>
                       ))}
-                    </select>
+                    </div>
+                    
+                    {/* Calendar Days */}
+                    <div className="grid grid-cols-7 gap-1">
+                      {/* Padding for start of month */}
+                      {Array.from({ length: getStartPadding() }).map((_, i) => (
+                        <div key={`pad-${i}`} className="h-11" />
+                      ))}
+                      
+                      {/* Actual days */}
+                      {getDaysInMonth().map((day) => {
+                        const isSelected = isSameDay(day, selectedDate);
+                        const isCurrentDay = isToday(day);
+                        const disabled = isDateDisabled(day);
+                        
+                        return (
+                          <button
+                            key={day.toISOString()}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => setSelectedDate(day)}
+                            className={`
+                              h-11 rounded-lg text-sm font-medium transition-colors
+                              ${isSelected 
+                                ? 'bg-emerald-500 text-white' 
+                                : isCurrentDay
+                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300'
+                                  : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                              }
+                              ${disabled ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'cursor-pointer'}
+                            `}
+                          >
+                            {format(day, 'd')}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
+                {/* Time Picker */}
+                <div className="space-y-2">
+                  <Label htmlFor="time">Time</Label>
+                  <select
+                    id="time"
+                    value={time}
+                    onChange={(e) => setTime(e.target.value)}
+                    className="w-full h-12 px-3 text-base border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none"
+                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', backgroundSize: '20px' }}
+                    data-testid="time-input"
+                  >
+                    {timeOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Club - Plain text input */}
                 <div className="space-y-2">
                   <Label htmlFor="club">Club</Label>
                   <Input
                     id="club"
-                    placeholder="Select or enter club"
+                    placeholder="Enter club name"
                     value={club}
                     onChange={(e) => setClub(e.target.value)}
-                    list="club-suggestions"
                     required
                     className="h-12 text-base"
+                    autoComplete="off"
                     data-testid="club-input"
                   />
-                  <datalist id="club-suggestions">
-                    {clubSuggestions.map((c) => (
-                      <option key={c} value={c} />
-                    ))}
-                  </datalist>
                 </div>
 
+                {/* Court */}
                 <div className="space-y-2">
                   <Label htmlFor="court">Court (optional)</Label>
                   <Input
@@ -209,6 +281,7 @@ const CreateRequest = () => {
                     value={court}
                     onChange={(e) => setCourt(e.target.value)}
                     className="h-12 text-base"
+                    autoComplete="off"
                     data-testid="court-input"
                   />
                 </div>
@@ -266,9 +339,9 @@ const CreateRequest = () => {
                       data-testid="skill-range-slider"
                     />
                     <div className="flex justify-between text-xs text-gray-500">
-                      <span>0 (Beginner)</span>
+                      <span>0</span>
                       <span>50</span>
-                      <span>100 (Pro)</span>
+                      <span>100</span>
                     </div>
                   </div>
                 )}
@@ -359,7 +432,7 @@ const CreateRequest = () => {
                   </div>
                 </div>
 
-                {/* Open (Regional) Option */}
+                {/* Open Option */}
                 <div 
                   className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                     audience === 'regional' 
