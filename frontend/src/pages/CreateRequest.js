@@ -11,9 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Loader2, ChevronDown, ArrowLeft, Info } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
+import { Loader2, ArrowLeft, Info } from 'lucide-react';
 import { format } from 'date-fns';
 
 const CreateRequest = () => {
@@ -28,11 +27,9 @@ const CreateRequest = () => {
   const [court, setCourt] = useState('');
   const [spotsNeeded, setSpotsNeeded] = useState(1);
   const [useSkillFilter, setUseSkillFilter] = useState(false);
-  const [skillMin, setSkillMin] = useState('');
-  const [skillMax, setSkillMax] = useState('');
+  const [skillRange, setSkillRange] = useState([20, 60]);
   const [audience, setAudience] = useState('crews');
   const [selectedCrews, setSelectedCrews] = useState([]);
-  const [includeFavorites, setIncludeFavorites] = useState(true);
   const [mode, setMode] = useState('quick_fill');
   const [notes, setNotes] = useState('');
 
@@ -41,7 +38,21 @@ const CreateRequest = () => {
   const [clubSuggestions, setClubSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [skillFilterOpen, setSkillFilterOpen] = useState(false);
+
+  // Time options (15 min intervals)
+  const timeOptions = [];
+  for (let h = 6; h <= 23; h++) {
+    for (let m = 0; m < 60; m += 15) {
+      const hour = h.toString().padStart(2, '0');
+      const min = m.toString().padStart(2, '0');
+      const displayHour = h > 12 ? h - 12 : h === 0 ? 12 : h;
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      timeOptions.push({
+        value: `${hour}:${min}`,
+        label: `${displayHour}:${min} ${ampm}`
+      });
+    }
+  }
 
   useEffect(() => {
     loadData();
@@ -53,10 +64,11 @@ const CreateRequest = () => {
         crewAPI.list(),
         utilityAPI.getClubSuggestions(),
       ]);
-      setCrews(crewsRes.data.filter((c) => c.is_member));
+      const myCrews = crewsRes.data.filter((c) => c.is_member);
+      setCrews(myCrews);
       setClubSuggestions(clubsRes.data);
       // Select all crews by default
-      setSelectedCrews(crewsRes.data.filter((c) => c.is_member).map((c) => c.id));
+      setSelectedCrews(myCrews.map((c) => c.id));
     } catch (err) {
       console.error('Failed to load data:', err);
     }
@@ -92,8 +104,8 @@ const CreateRequest = () => {
         club: club.trim(),
         court: court.trim() || null,
         spots_needed: spotsNeeded,
-        skill_min: useSkillFilter && skillMin ? parseInt(skillMin) : null,
-        skill_max: useSkillFilter && skillMax ? parseInt(skillMax) : null,
+        skill_min: useSkillFilter ? skillRange[0] : null,
+        skill_max: useSkillFilter ? skillRange[1] : null,
         mode,
         audience,
         target_crew_ids: audience === 'crews' ? selectedCrews : [],
@@ -111,7 +123,7 @@ const CreateRequest = () => {
 
   return (
     <AppLayout>
-      <div className="max-w-lg mx-auto" data-testid="create-request-page">
+      <div className="max-w-lg mx-auto pb-8" data-testid="create-request-page">
         <Button
           variant="ghost"
           className="mb-4"
@@ -127,7 +139,7 @@ const CreateRequest = () => {
             <CardDescription>Create a request to find players for your game</CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-8">
               {error && (
                 <Alert variant="destructive">
                   <AlertDescription>{error}</AlertDescription>
@@ -136,7 +148,7 @@ const CreateRequest = () => {
 
               {/* When & Where */}
               <div className="space-y-4">
-                <h3 className="font-medium text-gray-900 dark:text-white">When & Where</h3>
+                <h3 className="font-semibold text-gray-900 dark:text-white">When & Where</h3>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -148,19 +160,25 @@ const CreateRequest = () => {
                       onChange={(e) => setDate(e.target.value)}
                       min={format(new Date(), 'yyyy-MM-dd')}
                       required
+                      className="h-12 text-base"
                       data-testid="date-input"
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="time">Time</Label>
-                    <Input
+                    <select
                       id="time"
-                      type="time"
                       value={time}
                       onChange={(e) => setTime(e.target.value)}
-                      required
+                      className="w-full h-12 px-3 text-base border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
                       data-testid="time-input"
-                    />
+                    >
+                      {timeOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -173,6 +191,7 @@ const CreateRequest = () => {
                     onChange={(e) => setClub(e.target.value)}
                     list="club-suggestions"
                     required
+                    className="h-12 text-base"
                     data-testid="club-input"
                   />
                   <datalist id="club-suggestions">
@@ -189,21 +208,26 @@ const CreateRequest = () => {
                     placeholder="e.g., Court 3"
                     value={court}
                     onChange={(e) => setCourt(e.target.value)}
+                    className="h-12 text-base"
                     data-testid="court-input"
                   />
                 </div>
               </div>
 
-              {/* How Many */}
+              {/* How Many Players */}
               <div className="space-y-4">
-                <h3 className="font-medium text-gray-900 dark:text-white">How Many Players?</h3>
-                <div className="flex gap-2">
+                <h3 className="font-semibold text-gray-900 dark:text-white">How Many Players?</h3>
+                <div className="grid grid-cols-3 gap-2">
                   {[1, 2, 3].map((num) => (
                     <Button
                       key={num}
                       type="button"
                       variant={spotsNeeded === num ? 'default' : 'outline'}
-                      className={spotsNeeded === num ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
+                      className={`h-14 text-lg font-semibold ${
+                        spotsNeeded === num 
+                          ? 'bg-emerald-600 hover:bg-emerald-700' 
+                          : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                      }`}
                       onClick={() => setSpotsNeeded(num)}
                       data-testid={`spots-${num}-btn`}
                     >
@@ -213,129 +237,207 @@ const CreateRequest = () => {
                 </div>
               </div>
 
-              {/* Skill Filter */}
-              <Collapsible open={skillFilterOpen} onOpenChange={setSkillFilterOpen}>
-                <CollapsibleTrigger asChild>
-                  <Button variant="ghost" className="w-full justify-between p-0 h-auto font-medium">
-                    Skill Level (optional)
-                    <ChevronDown className={`w-4 h-4 transition-transform ${skillFilterOpen ? 'rotate-180' : ''}`} />
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="pt-4 space-y-4">
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="skill-filter"
-                      checked={useSkillFilter}
-                      onCheckedChange={setUseSkillFilter}
-                    />
-                    <Label htmlFor="skill-filter">Filter by PTI</Label>
-                  </div>
-                  {useSkillFilter && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="skillMin">Min PTI</Label>
-                        <Input
-                          id="skillMin"
-                          type="number"
-                          placeholder="e.g., 30"
-                          value={skillMin}
-                          onChange={(e) => setSkillMin(e.target.value)}
-                          min="0"
-                          max="100"
-                          data-testid="skill-min-input"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="skillMax">Max PTI</Label>
-                        <Input
-                          id="skillMax"
-                          type="number"
-                          placeholder="e.g., 60"
-                          value={skillMax}
-                          onChange={(e) => setSkillMax(e.target.value)}
-                          min="0"
-                          max="100"
-                          data-testid="skill-max-input"
-                        />
-                      </div>
-                    </div>
-                  )}
-                  <p className="text-xs text-gray-500 flex items-start gap-1">
-                    <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                    Leave off to invite players of any level. Unrated players will still be included.
-                  </p>
-                </CollapsibleContent>
-              </Collapsible>
-
-              {/* Who to Ask */}
+              {/* Skill Level */}
               <div className="space-y-4">
-                <h3 className="font-medium text-gray-900 dark:text-white">Who to Ask</h3>
-                <RadioGroup value={audience} onValueChange={setAudience}>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="crews" id="audience-crews" />
-                    <Label htmlFor="audience-crews">My Crews & Favorites</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="club" id="audience-club" />
-                    <Label htmlFor="audience-club">My Club</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="regional" id="audience-regional" />
-                    <Label htmlFor="audience-regional">All Clubs (Regional)</Label>
-                  </div>
-                </RadioGroup>
-
-                {audience === 'crews' && crews.length > 0 && (
-                  <div className="space-y-2 pl-6 border-l-2 border-gray-200">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="favorites"
-                        checked={includeFavorites}
-                        onCheckedChange={setIncludeFavorites}
-                      />
-                      <Label htmlFor="favorites">Favorites</Label>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-gray-900 dark:text-white">Skill Level</h3>
+                  <Switch
+                    checked={useSkillFilter}
+                    onCheckedChange={setUseSkillFilter}
+                    data-testid="skill-filter-toggle"
+                  />
+                </div>
+                
+                {useSkillFilter && (
+                  <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium">PTI Range</span>
+                      <span className="text-sm font-semibold text-emerald-600">
+                        {skillRange[0]} - {skillRange[1]}
+                      </span>
                     </div>
-                    {crews.map((crew) => (
-                      <div key={crew.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`crew-${crew.id}`}
-                          checked={selectedCrews.includes(crew.id)}
-                          onCheckedChange={() => handleCrewToggle(crew.id)}
-                        />
-                        <Label htmlFor={`crew-${crew.id}`}>
-                          {crew.name} ({crew.member_count})
-                        </Label>
-                      </div>
-                    ))}
+                    <Slider
+                      value={skillRange}
+                      onValueChange={setSkillRange}
+                      min={0}
+                      max={100}
+                      step={5}
+                      className="w-full"
+                      data-testid="skill-range-slider"
+                    />
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>0 (Beginner)</span>
+                      <span>50</span>
+                      <span>100 (Pro)</span>
+                    </div>
                   </div>
                 )}
-
-                {audience === 'crews' && crews.length === 0 && (
-                  <p className="text-sm text-gray-500 pl-6">
-                    You haven't joined any crews yet. Consider creating one or expanding your audience.
+                
+                {!useSkillFilter && (
+                  <p className="text-sm text-gray-500 flex items-start gap-2">
+                    <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    All skill levels welcome
                   </p>
                 )}
               </div>
 
+              {/* Who to Ask */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-gray-900 dark:text-white">Who to Ask</h3>
+                
+                {/* My Crews Option */}
+                <div 
+                  className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    audience === 'crews' 
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' 
+                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                  }`}
+                  onClick={() => setAudience('crews')}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      audience === 'crews' 
+                        ? 'border-emerald-500 bg-emerald-500' 
+                        : 'border-gray-300'
+                    }`}>
+                      {audience === 'crews' && (
+                        <div className="w-2 h-2 rounded-full bg-white" />
+                      )}
+                    </div>
+                    <span className="font-medium">My Crews</span>
+                  </div>
+                  
+                  {/* Crew checkboxes - show when crews is selected */}
+                  {audience === 'crews' && crews.length > 0 && (
+                    <div className="mt-4 ml-8 space-y-3">
+                      {crews.map((crew) => (
+                        <label 
+                          key={crew.id} 
+                          className="flex items-center gap-3 cursor-pointer"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Checkbox
+                            checked={selectedCrews.includes(crew.id)}
+                            onCheckedChange={() => handleCrewToggle(crew.id)}
+                            className="data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
+                          />
+                          <span className="text-sm">
+                            {crew.name} ({crew.member_count})
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {audience === 'crews' && crews.length === 0 && (
+                    <p className="mt-3 ml-8 text-sm text-gray-500">
+                      You haven't joined any crews yet
+                    </p>
+                  )}
+                </div>
+
+                {/* My Club Option */}
+                <div 
+                  className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    audience === 'club' 
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' 
+                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                  }`}
+                  onClick={() => setAudience('club')}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      audience === 'club' 
+                        ? 'border-emerald-500 bg-emerald-500' 
+                        : 'border-gray-300'
+                    }`}>
+                      {audience === 'club' && (
+                        <div className="w-2 h-2 rounded-full bg-white" />
+                      )}
+                    </div>
+                    <span className="font-medium">My Club</span>
+                  </div>
+                </div>
+
+                {/* Open (Regional) Option */}
+                <div 
+                  className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    audience === 'regional' 
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' 
+                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                  }`}
+                  onClick={() => setAudience('regional')}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      audience === 'regional' 
+                        ? 'border-emerald-500 bg-emerald-500' 
+                        : 'border-gray-300'
+                    }`}>
+                      {audience === 'regional' && (
+                        <div className="w-2 h-2 rounded-full bg-white" />
+                      )}
+                    </div>
+                    <span className="font-medium">Open</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Fill Mode */}
               <div className="space-y-4">
-                <h3 className="font-medium text-gray-900 dark:text-white">Fill Mode</h3>
-                <RadioGroup value={mode} onValueChange={setMode}>
-                  <div className="flex items-start space-x-2">
-                    <RadioGroupItem value="quick_fill" id="mode-quick" className="mt-1" />
+                <h3 className="font-semibold text-gray-900 dark:text-white">Fill Mode</h3>
+                
+                {/* Quick Fill */}
+                <div 
+                  className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    mode === 'quick_fill' 
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' 
+                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                  }`}
+                  onClick={() => setMode('quick_fill')}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      mode === 'quick_fill' 
+                        ? 'border-emerald-500 bg-emerald-500' 
+                        : 'border-gray-300'
+                    }`}>
+                      {mode === 'quick_fill' && (
+                        <div className="w-2 h-2 rounded-full bg-white" />
+                      )}
+                    </div>
                     <div>
-                      <Label htmlFor="mode-quick">Quick Fill</Label>
-                      <p className="text-xs text-gray-500">First responders automatically get spots</p>
+                      <span className="font-medium">Quick Fill</span>
+                      <p className="text-sm text-gray-500">First response gets spot</p>
                     </div>
                   </div>
-                  <div className="flex items-start space-x-2">
-                    <RadioGroupItem value="organizer_picks" id="mode-picks" className="mt-1" />
+                </div>
+
+                {/* Managed */}
+                <div 
+                  className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    mode === 'organizer_picks' 
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' 
+                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                  }`}
+                  onClick={() => setMode('organizer_picks')}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      mode === 'organizer_picks' 
+                        ? 'border-emerald-500 bg-emerald-500' 
+                        : 'border-gray-300'
+                    }`}>
+                      {mode === 'organizer_picks' && (
+                        <div className="w-2 h-2 rounded-full bg-white" />
+                      )}
+                    </div>
                     <div>
-                      <Label htmlFor="mode-picks">I'll Pick</Label>
-                      <p className="text-xs text-gray-500">You choose from interested players</p>
+                      <span className="font-medium">Managed</span>
+                      <p className="text-sm text-gray-500">You choose from interested players</p>
                     </div>
                   </div>
-                </RadioGroup>
+                </div>
               </div>
 
               {/* Notes */}
@@ -347,6 +449,7 @@ const CreateRequest = () => {
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}
+                  className="text-base"
                   data-testid="notes-input"
                 />
               </div>
@@ -354,13 +457,13 @@ const CreateRequest = () => {
               {/* Submit */}
               <Button
                 type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-700"
+                className="w-full h-14 text-lg bg-emerald-600 hover:bg-emerald-700"
                 disabled={loading}
                 data-testid="send-request-btn"
               >
                 {loading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                     Sending...
                   </>
                 ) : (
