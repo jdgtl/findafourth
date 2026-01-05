@@ -6,23 +6,35 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, field_validator
+from enum import Enum
 from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
 import bcrypt
 import jwt
+import re
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+# Startup validation for required environment variables
+def validate_env_vars():
+    """Validate all required environment variables are set."""
+    required_vars = ['MONGO_URL', 'JWT_SECRET', 'CORS_ORIGINS']
+    missing = [var for var in required_vars if not os.environ.get(var)]
+    if missing:
+        raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+
+validate_env_vars()
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ.get('DB_NAME', 'needafourth')]
 
-# JWT Configuration
-JWT_SECRET = os.environ.get('JWT_SECRET', 'needafourth-secret-key-change-in-production')
+# JWT Configuration - JWT_SECRET is now required (no fallback)
+JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24 * 7  # 7 days
 
@@ -44,40 +56,109 @@ logger = logging.getLogger(__name__)
 
 # ==================== MODELS ====================
 
+# Enums for validation
+class VisibilityType(str, Enum):
+    EVERYONE = "everyone"
+    CREWS_ONLY = "crews_only"
+    HIDDEN = "hidden"
+
+class CrewType(str, Enum):
+    OPEN = "open"
+    INVITE_ONLY = "invite_only"
+
+class RequestMode(str, Enum):
+    QUICK_FILL = "quick_fill"
+    ORGANIZER_PICKS = "organizer_picks"
+
+class AudienceType(str, Enum):
+    CREWS = "crews"
+    CLUB = "club"
+    REGIONAL = "regional"
+
+class RequestStatus(str, Enum):
+    OPEN = "open"
+    FILLED = "filled"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+class ResponseStatus(str, Enum):
+    INTERESTED = "interested"
+    CONFIRMED = "confirmed"
+    PASSED = "passed"
+
+# Validation constants
+MAX_NAME_LENGTH = 100
+MAX_PHONE_LENGTH = 20
+MAX_CLUB_LENGTH = 100
+MAX_NOTES_LENGTH = 500
+MAX_COURT_LENGTH = 50
+MAX_OTHER_CLUBS = 10
+MIN_PTI = 1
+MAX_PTI = 100
+MIN_PASSWORD_LENGTH = 8
+MAX_PASSWORD_LENGTH = 128
+
 # Player Models
 class PlayerBase(BaseModel):
     email: EmailStr
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    home_club: Optional[str] = None
-    other_clubs: List[str] = []
-    pti: Optional[int] = None
+    name: Optional[str] = Field(None, max_length=MAX_NAME_LENGTH)
+    phone: Optional[str] = Field(None, max_length=MAX_PHONE_LENGTH)
+    home_club: Optional[str] = Field(None, max_length=MAX_CLUB_LENGTH)
+    other_clubs: List[str] = Field(default_factory=list, max_length=MAX_OTHER_CLUBS)
+    pti: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
     notify_push: bool = True
     notify_sms: bool = False
     notify_email: bool = True
-    visibility: str = "everyone"  # everyone, crews_only, hidden
+    visibility: VisibilityType = VisibilityType.EVERYONE
+
+    @field_validator('other_clubs')
+    @classmethod
+    def validate_other_clubs(cls, v):
+        if v:
+            for club in v:
+                if len(club) > MAX_CLUB_LENGTH:
+                    raise ValueError(f'Club name must be {MAX_CLUB_LENGTH} characters or less')
+        return v
 
 class PlayerCreate(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=MIN_PASSWORD_LENGTH, max_length=MAX_PASSWORD_LENGTH)
 
 class PlayerProfile(BaseModel):
-    name: str
-    home_club: str
-    other_clubs: List[str] = []
-    pti: Optional[int] = None
-    phone: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=MAX_NAME_LENGTH)
+    home_club: str = Field(..., min_length=1, max_length=MAX_CLUB_LENGTH)
+    other_clubs: List[str] = Field(default_factory=list, max_length=MAX_OTHER_CLUBS)
+    pti: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
+    phone: Optional[str] = Field(None, max_length=MAX_PHONE_LENGTH)
+
+    @field_validator('other_clubs')
+    @classmethod
+    def validate_other_clubs(cls, v):
+        if v:
+            for club in v:
+                if len(club) > MAX_CLUB_LENGTH:
+                    raise ValueError(f'Club name must be {MAX_CLUB_LENGTH} characters or less')
+        return v
 
 class PlayerUpdate(BaseModel):
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    home_club: Optional[str] = None
-    other_clubs: Optional[List[str]] = None
-    pti: Optional[int] = None
+    name: Optional[str] = Field(None, max_length=MAX_NAME_LENGTH)
+    phone: Optional[str] = Field(None, max_length=MAX_PHONE_LENGTH)
+    home_club: Optional[str] = Field(None, max_length=MAX_CLUB_LENGTH)
+    other_clubs: Optional[List[str]] = Field(None, max_length=MAX_OTHER_CLUBS)
+    pti: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
     notify_push: Optional[bool] = None
     notify_sms: Optional[bool] = None
     notify_email: Optional[bool] = None
-    visibility: Optional[str] = None
+    visibility: Optional[VisibilityType] = None
+
+    @field_validator('other_clubs')
+    @classmethod
+    def validate_other_clubs(cls, v):
+        if v:
+            for club in v:
+                if len(club) > MAX_CLUB_LENGTH:
+                    raise ValueError(f'Club name must be {MAX_CLUB_LENGTH} characters or less')
+        return v
 
 class Player(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -113,19 +194,21 @@ class TokenResponse(BaseModel):
     player: dict
 
 # Crew Models
+MAX_CREW_NAME_LENGTH = 100
+
 class CrewCreate(BaseModel):
-    name: str
-    type: str = "invite_only"  # open, invite_only
+    name: str = Field(..., min_length=1, max_length=MAX_CREW_NAME_LENGTH)
+    type: CrewType = CrewType.INVITE_ONLY
 
 class CrewUpdate(BaseModel):
-    name: Optional[str] = None
-    type: Optional[str] = None
+    name: Optional[str] = Field(None, max_length=MAX_CREW_NAME_LENGTH)
+    type: Optional[CrewType] = None
 
 class Crew(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str
+    name: str = Field(..., max_length=MAX_CREW_NAME_LENGTH)
     created_by: str
-    type: str = "invite_only"
+    type: CrewType = CrewType.INVITE_ONLY
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class CrewMember(BaseModel):
@@ -142,70 +225,90 @@ class Favorite(BaseModel):
 # Request Models
 class RequestCreate(BaseModel):
     date_time: datetime
-    club: str
-    court: Optional[str] = None
+    club: str = Field(..., min_length=1, max_length=MAX_CLUB_LENGTH)
+    court: Optional[str] = Field(None, max_length=MAX_COURT_LENGTH)
     spots_needed: int = Field(ge=1, le=3)
-    skill_min: Optional[int] = None
-    skill_max: Optional[int] = None
-    mode: str = "quick_fill"  # quick_fill, organizer_picks
-    audience: str = "crews"  # crews, club, regional
-    target_crew_ids: List[str] = []
-    notes: Optional[str] = None
+    skill_min: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
+    skill_max: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
+    mode: RequestMode = RequestMode.QUICK_FILL
+    audience: AudienceType = AudienceType.CREWS
+    target_crew_ids: List[str] = Field(default_factory=list)
+    notes: Optional[str] = Field(None, max_length=MAX_NOTES_LENGTH)
+
+    @field_validator('skill_max')
+    @classmethod
+    def validate_skill_range(cls, v, info):
+        if v is not None and info.data.get('skill_min') is not None:
+            if v < info.data['skill_min']:
+                raise ValueError('skill_max must be greater than or equal to skill_min')
+        return v
 
 class RequestUpdate(BaseModel):
-    court: Optional[str] = None
-    skill_min: Optional[int] = None
-    skill_max: Optional[int] = None
-    audience: Optional[str] = None
+    court: Optional[str] = Field(None, max_length=MAX_COURT_LENGTH)
+    skill_min: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
+    skill_max: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
+    audience: Optional[AudienceType] = None
     target_crew_ids: Optional[List[str]] = None
-    notes: Optional[str] = None
-    status: Optional[str] = None
+    notes: Optional[str] = Field(None, max_length=MAX_NOTES_LENGTH)
+    status: Optional[RequestStatus] = None
 
 class GameRequest(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     organizer_id: str
     date_time: datetime
-    club: str
-    court: Optional[str] = None
-    spots_needed: int
-    spots_filled: int = 0
-    skill_min: Optional[int] = None
-    skill_max: Optional[int] = None
-    mode: str = "quick_fill"
-    audience: str = "crews"
-    target_crew_ids: List[str] = []
-    status: str = "open"  # open, filled, cancelled, expired
-    notes: Optional[str] = None
+    club: str = Field(..., max_length=MAX_CLUB_LENGTH)
+    court: Optional[str] = Field(None, max_length=MAX_COURT_LENGTH)
+    spots_needed: int = Field(ge=1, le=3)
+    spots_filled: int = Field(default=0, ge=0)
+    skill_min: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
+    skill_max: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
+    mode: RequestMode = RequestMode.QUICK_FILL
+    audience: AudienceType = AudienceType.CREWS
+    target_crew_ids: List[str] = Field(default_factory=list)
+    status: RequestStatus = RequestStatus.OPEN
+    notes: Optional[str] = Field(None, max_length=MAX_NOTES_LENGTH)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # Response Models
 class ResponseCreate(BaseModel):
-    status: str = "interested"  # interested, confirmed, passed
+    status: ResponseStatus = ResponseStatus.INTERESTED
 
 class ResponseUpdate(BaseModel):
-    status: str  # interested, confirmed, passed
+    status: ResponseStatus
 
 class GameResponse(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     request_id: str
     player_id: str
-    status: str = "interested"
+    status: ResponseStatus = ResponseStatus.INTERESTED
     responded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # Availability Models
+MAX_MESSAGE_LENGTH = 300
+DATE_REGEX = r'^\d{4}-\d{2}-\d{2}$'
+
 class AvailabilityCreate(BaseModel):
-    message: str
-    available_date: str  # YYYY-MM-DD format
-    clubs: List[str] = []
+    message: str = Field(..., min_length=1, max_length=MAX_MESSAGE_LENGTH)
+    available_date: str = Field(..., pattern=DATE_REGEX)  # YYYY-MM-DD format
+    clubs: List[str] = Field(default_factory=list, max_length=MAX_OTHER_CLUBS)
     expires_at: Optional[datetime] = None
+
+    @field_validator('clubs')
+    @classmethod
+    def validate_clubs(cls, v):
+        if v:
+            for club in v:
+                if len(club) > MAX_CLUB_LENGTH:
+                    raise ValueError(f'Club name must be {MAX_CLUB_LENGTH} characters or less')
+        return v
 
 class AvailabilityPost(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     player_id: str
-    message: str
-    available_date: str
-    clubs: List[str] = []
+    message: str = Field(..., max_length=MAX_MESSAGE_LENGTH)
+    available_date: str = Field(..., pattern=DATE_REGEX)
+    clubs: List[str] = Field(default_factory=list)
     expires_at: datetime
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -377,9 +480,11 @@ async def list_players(
     current_player: dict = Depends(get_current_player)
 ):
     query = {"profile_complete": True}
-    
+
     if search:
-        query["name"] = {"$regex": search, "$options": "i"}
+        # Escape regex special characters to prevent ReDoS attacks
+        escaped_search = re.escape(search)
+        query["name"] = {"$regex": escaped_search, "$options": "i"}
     if club:
         query["$or"] = [{"home_club": club}, {"other_clubs": club}]
     
@@ -1189,7 +1294,7 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=os.environ['CORS_ORIGINS'].split(','),  # No fallback - required env var
     allow_methods=["*"],
     allow_headers=["*"],
 )
