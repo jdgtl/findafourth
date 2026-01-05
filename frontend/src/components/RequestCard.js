@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { getInitials } from '@/lib/utils';
 import { format, isToday, isTomorrow, parseISO } from 'date-fns';
 import { MapPin, Clock, Users, ChevronDown, ChevronUp, Check, Hourglass } from 'lucide-react';
 
-const RequestCard = ({ request, isOrganizer, myResponse, onRespond, onClick }) => {
+const RequestCard = memo(({ request, isOrganizer, myResponse, onRespond, onClick }) => {
   const [expanded, setExpanded] = useState(false);
 
   const getTimeDisplay = (dateTimeStr) => {
@@ -33,16 +34,6 @@ const RequestCard = ({ request, isOrganizer, myResponse, onRespond, onClick }) =
     }
     if (request.skill_min) return `PTI ${request.skill_min}+`;
     if (request.skill_max) return `PTI up to ${request.skill_max}`;
-  };
-
-  const getInitials = (name) => {
-    if (!name) return '?';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
   };
 
   const getStatusBadge = () => {
@@ -190,6 +181,6 @@ const RequestCard = ({ request, isOrganizer, myResponse, onRespond, onClick }) =
       </CardContent>
     </Card>
   );
-};
+});
 
 export default RequestCard;

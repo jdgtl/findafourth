@@ -531,20 +531,34 @@ async def delete_player(player_id: str, current_player: dict = Depends(get_curre
 
 @api_router.get("/crews")
 async def list_crews(current_player: dict = Depends(get_current_player)):
-    # Get crews the player is a member of
+    # Get crews the player is a member of (single query)
     memberships = await db.crew_members.find({"player_id": current_player['id']}).to_list(1000)
-    crew_ids = [m['crew_id'] for m in memberships]
-    
-    # Get all crews (for open crews discovery)
-    all_crews = await db.crews.find({}, {"_id": 0}).to_list(1000)
-    
-    # Add member count and membership status to each crew
+    my_crew_ids = set(m['crew_id'] for m in memberships)
+
+    # Use aggregation pipeline to get all crews with member counts in one query
+    pipeline = [
+        {"$lookup": {
+            "from": "crew_members",
+            "localField": "id",
+            "foreignField": "crew_id",
+            "as": "members"
+        }},
+        {"$addFields": {
+            "member_count": {"$size": "$members"}
+        }},
+        {"$project": {
+            "_id": 0,
+            "members": 0  # Remove the members array, we only need the count
+        }}
+    ]
+
+    all_crews = await db.crews.aggregate(pipeline).to_list(1000)
+
+    # Add membership and creator status
     for crew in all_crews:
-        members = await db.crew_members.find({"crew_id": crew['id']}).to_list(1000)
-        crew['member_count'] = len(members)
-        crew['is_member'] = crew['id'] in crew_ids
+        crew['is_member'] = crew['id'] in my_crew_ids
         crew['is_creator'] = crew['created_by'] == current_player['id']
-    
+
     return all_crews
 
 @api_router.post("/crews")
@@ -842,21 +856,36 @@ async def list_requests(current_player: dict = Depends(get_current_player)):
             if in_range:
                 filtered_requests.append(req)
     
-    # Add organizer info and response status to each request
-    for req in filtered_requests:
-        organizer = await db.players.find_one({"id": req['organizer_id']}, {"_id": 0, "password_hash": 0})
-        req['organizer'] = organizer
-        
-        # Check if current player has responded
-        response = await db.responses.find_one({
-            "request_id": req['id'],
-            "player_id": current_player['id']
-        }, {"_id": 0})
-        req['my_response'] = response
-    
+    # Batch fetch all organizers and responses to avoid N+1 queries
+    if filtered_requests:
+        # Get unique organizer IDs
+        organizer_ids = list(set(req['organizer_id'] for req in filtered_requests))
+
+        # Batch fetch all organizers in one query
+        organizers_list = await db.players.find(
+            {"id": {"$in": organizer_ids}},
+            {"_id": 0, "password_hash": 0}
+        ).to_list(1000)
+        organizers_map = {o['id']: o for o in organizers_list}
+
+        # Get all request IDs
+        request_ids = [req['id'] for req in filtered_requests]
+
+        # Batch fetch all responses for current player in one query
+        responses_list = await db.responses.find(
+            {"request_id": {"$in": request_ids}, "player_id": current_player['id']},
+            {"_id": 0}
+        ).to_list(1000)
+        responses_map = {r['request_id']: r for r in responses_list}
+
+        # Add organizer and response info to each request
+        for req in filtered_requests:
+            req['organizer'] = organizers_map.get(req['organizer_id'])
+            req['my_response'] = responses_map.get(req['id'])
+
     # Sort by date_time
     filtered_requests.sort(key=lambda x: x['date_time'])
-    
+
     return filtered_requests
 
 @api_router.post("/requests")
@@ -894,19 +923,22 @@ async def create_request(data: RequestCreate, current_player: dict = Depends(get
 async def notify_request_audience(request: dict, organizer: dict):
     """Notify players based on request audience"""
     player_ids_to_notify = set()
-    
+    target_crew_ids = request.get('target_crew_ids', [])
+
     if request['audience'] == 'crews':
-        # Get members of target crews
-        for crew_id in request.get('target_crew_ids', []):
-            members = await db.crew_members.find({"crew_id": crew_id}).to_list(1000)
+        # Batch fetch members of all target crews in one query
+        if target_crew_ids:
+            members = await db.crew_members.find(
+                {"crew_id": {"$in": target_crew_ids}}
+            ).to_list(1000)
             for m in members:
                 player_ids_to_notify.add(m['player_id'])
-        
+
         # Also notify favorites
         favorites = await db.favorites.find({"player_id": organizer['id']}).to_list(1000)
         for f in favorites:
             player_ids_to_notify.add(f['favorite_player_id'])
-    
+
     elif request['audience'] == 'club':
         # Get players at the same club
         players = await db.players.find({
@@ -918,46 +950,69 @@ async def notify_request_audience(request: dict, organizer: dict):
         }).to_list(1000)
         for p in players:
             player_ids_to_notify.add(p['id'])
-    
+
     elif request['audience'] == 'regional':
         # Notify everyone (with profile complete)
         players = await db.players.find({"profile_complete": True}).to_list(1000)
         for p in players:
             player_ids_to_notify.add(p['id'])
-    
+
     # Remove organizer from notifications
     player_ids_to_notify.discard(organizer['id'])
-    
-    # Filter by visibility and skill
+
+    if not player_ids_to_notify:
+        return
+
+    # Batch fetch all players to notify in one query
+    players_list = await db.players.find(
+        {"id": {"$in": list(player_ids_to_notify)}}
+    ).to_list(1000)
+    players_map = {p['id']: p for p in players_list}
+
+    # For crews_only visibility, batch fetch all memberships
+    crews_only_player_ids = [
+        pid for pid in player_ids_to_notify
+        if players_map.get(pid, {}).get('visibility') == 'crews_only'
+    ]
+    membership_map = {}
+    if crews_only_player_ids:
+        memberships = await db.crew_members.find(
+            {"player_id": {"$in": crews_only_player_ids}}
+        ).to_list(1000)
+        for m in memberships:
+            if m['player_id'] not in membership_map:
+                membership_map[m['player_id']] = []
+            membership_map[m['player_id']].append(m['crew_id'])
+
+    # Filter by visibility and skill, then send notifications
+    skill_min = request.get('skill_min')
+    skill_max = request.get('skill_max')
+    time_str = request['date_time'].split('T')[1][:5] if 'T' in request['date_time'] else request['date_time']
+
     for player_id in player_ids_to_notify:
-        player = await db.players.find_one({"id": player_id})
+        player = players_map.get(player_id)
         if not player:
             continue
-        
+
         # Check visibility
         if player.get('visibility') == 'hidden':
             continue
         if player.get('visibility') == 'crews_only':
             # Check if player is in one of the target crews
-            memberships = await db.crew_members.find({"player_id": player_id}).to_list(1000)
-            player_crew_ids = [m['crew_id'] for m in memberships]
-            if not any(cid in request.get('target_crew_ids', []) for cid in player_crew_ids):
+            player_crew_ids = membership_map.get(player_id, [])
+            if not any(cid in target_crew_ids for cid in player_crew_ids):
                 continue
-        
+
         # Check skill filter
-        skill_min = request.get('skill_min')
-        skill_max = request.get('skill_max')
         player_pti = player.get('pti')
-        
         if skill_min is not None or skill_max is not None:
             if player_pti is not None:
                 if skill_min is not None and player_pti < skill_min:
                     continue
                 if skill_max is not None and player_pti > skill_max:
                     continue
-        
+
         # Send notification
-        time_str = request['date_time'].split('T')[1][:5] if 'T' in request['date_time'] else request['date_time']
         await notify_player(
             player,
             f"{organizer.get('name', 'Someone')} needs players",
