@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { utilityAPI } from '@/lib/api';
+import { logError } from '@/lib/errors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,7 +36,8 @@ const CompleteProfile = () => {
       const response = await utilityAPI.getClubSuggestions();
       setClubSuggestions(response.data);
     } catch (err) {
-      console.error('Failed to load club suggestions');
+      logError('CompleteProfile.loadClubSuggestions', err);
+      // Non-blocking error - suggestions are optional
     }
   };
 

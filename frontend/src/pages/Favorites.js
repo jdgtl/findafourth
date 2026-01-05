@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { favoriteAPI, playerAPI } from '@/lib/api';
+import { logError } from '@/lib/errors';
+import { useDebounce } from '@/hooks/useDebounce';
+import { getInitials } from '@/lib/utils';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,37 +38,46 @@ const Favorites = () => {
       const response = await favoriteAPI.list();
       setFavorites(response.data);
     } catch (err) {
-      console.error('Failed to fetch favorites:', err);
+      logError('Favorites.fetch', err);
+      toast.error('Failed to load favorites');
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Debounce search query to prevent API calls on every keystroke
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
   useEffect(() => {
     fetchFavorites();
   }, [fetchFavorites]);
 
-  const handleSearch = async (query) => {
-    setSearchQuery(query);
-    if (query.length < 2) {
-      setSearchResults([]);
-      return;
-    }
+  // Perform search when debounced query changes
+  useEffect(() => {
+    const performSearch = async () => {
+      if (debouncedSearchQuery.length < 2) {
+        setSearchResults([]);
+        return;
+      }
 
-    setSearching(true);
-    try {
-      const response = await playerAPI.list({ search: query });
-      // Filter out self and existing favorites
-      const favoriteIds = favorites.map((f) => f.id);
-      setSearchResults(
-        response.data.filter((p) => p.id !== player?.id && !favoriteIds.includes(p.id))
-      );
-    } catch (err) {
-      console.error('Search failed:', err);
-    } finally {
-      setSearching(false);
-    }
-  };
+      setSearching(true);
+      try {
+        const response = await playerAPI.list({ search: debouncedSearchQuery });
+        // Filter out self and existing favorites
+        const favoriteIds = favorites.map((f) => f.id);
+        setSearchResults(
+          response.data.filter((p) => p.id !== player?.id && !favoriteIds.includes(p.id))
+        );
+      } catch (err) {
+        logError('Favorites.search', err);
+        toast.error('Search failed');
+      } finally {
+        setSearching(false);
+      }
+    };
+
+    performSearch();
+  }, [debouncedSearchQuery, favorites, player]);
 
   const handleAddFavorite = async (playerId) => {
     setActionLoading(true);
@@ -74,8 +87,10 @@ const Favorites = () => {
       setSearchQuery('');
       setSearchResults([]);
       fetchFavorites();
+      toast.success('Added to favorites');
     } catch (err) {
-      console.error('Failed to add favorite:', err);
+      logError('Favorites.add', err);
+      toast.error('Failed to add favorite');
     } finally {
       setActionLoading(false);
     }
@@ -86,21 +101,13 @@ const Favorites = () => {
     try {
       await favoriteAPI.remove(playerId);
       fetchFavorites();
+      toast.success('Removed from favorites');
     } catch (err) {
-      console.error('Failed to remove favorite:', err);
+      logError('Favorites.remove', err);
+      toast.error('Failed to remove favorite');
     } finally {
       setActionLoading(false);
     }
-  };
-
-  const getInitials = (name) => {
-    if (!name) return '?';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
   };
 
   return (
@@ -128,7 +135,7 @@ const Favorites = () => {
                   <Input
                     placeholder="Search by name..."
                     value={searchQuery}
-                    onChange={(e) => handleSearch(e.target.value)}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-10"
                     data-testid="search-players-input"
                   />

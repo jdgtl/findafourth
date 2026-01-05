@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import PlayerAvatar from '@/components/PlayerAvatar';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -9,8 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Home, Users, Star, User, Menu, LogOut } from 'lucide-react';
+import { Home, Users, Star, User, LogOut } from 'lucide-react';
 
 const AppLayout = ({ children }) => {
   const { player, logout } = useAuth();
@@ -28,16 +28,6 @@ const AppLayout = ({ children }) => {
     { path: '/favorites', icon: Star, label: 'Favorites' },
     { path: '/profile', icon: User, label: 'Profile' },
   ];
-
-  const getInitials = (name) => {
-    if (!name) return '?';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -68,11 +58,7 @@ const AppLayout = ({ children }) => {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="flex items-center gap-2">
-                  <Avatar className="w-8 h-8">
-                    <AvatarFallback className="bg-emerald-600 text-white text-sm">
-                      {getInitials(player?.name)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <PlayerAvatar name={player?.name} size="md" variant="primary" />
                   <span className="hidden md:inline text-sm font-medium">
                     {player?.name || 'Player'}
                   </span>

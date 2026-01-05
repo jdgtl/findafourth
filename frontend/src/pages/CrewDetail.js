@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { crewAPI, playerAPI } from '@/lib/api';
+import { logError } from '@/lib/errors';
+import { useDebounce } from '@/hooks/useDebounce';
+import { getInitials } from '@/lib/utils';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,6 +58,9 @@ const CrewDetail = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
 
+  // Debounce search query to prevent API calls on every keystroke
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
   const fetchCrew = useCallback(async () => {
     try {
       const response = await crewAPI.get(id);
@@ -69,25 +76,30 @@ const CrewDetail = () => {
     fetchCrew();
   }, [fetchCrew]);
 
-  const handleSearch = async (query) => {
-    setSearchQuery(query);
-    if (query.length < 2) {
-      setSearchResults([]);
-      return;
-    }
+  // Perform search when debounced query changes
+  useEffect(() => {
+    const performSearch = async () => {
+      if (debouncedSearchQuery.length < 2) {
+        setSearchResults([]);
+        return;
+      }
 
-    setSearching(true);
-    try {
-      const response = await playerAPI.list({ search: query });
-      // Filter out existing members
-      const memberIds = crew?.members?.map((m) => m.id) || [];
-      setSearchResults(response.data.filter((p) => !memberIds.includes(p.id)));
-    } catch (err) {
-      console.error('Search failed:', err);
-    } finally {
-      setSearching(false);
-    }
-  };
+      setSearching(true);
+      try {
+        const response = await playerAPI.list({ search: debouncedSearchQuery });
+        // Filter out existing members
+        const memberIds = crew?.members?.map((m) => m.id) || [];
+        setSearchResults(response.data.filter((p) => !memberIds.includes(p.id)));
+      } catch (err) {
+        logError('CrewDetail.search', err);
+        toast.error('Search failed');
+      } finally {
+        setSearching(false);
+      }
+    };
+
+    performSearch();
+  }, [debouncedSearchQuery, crew]);
 
   const handleInvite = async (playerId) => {
     setActionLoading(true);
@@ -150,16 +162,6 @@ const CrewDetail = () => {
     } finally {
       setActionLoading(false);
     }
-  };
-
-  const getInitials = (name) => {
-    if (!name) return '?';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
   };
 
   if (loading) {
@@ -256,7 +258,7 @@ const CrewDetail = () => {
                       <Input
                         placeholder="Search by name..."
                         value={searchQuery}
-                        onChange={(e) => handleSearch(e.target.value)}
+                        onChange={(e) => setSearchQuery(e.target.value)}
                         className="pl-10"
                         data-testid="search-players-input"
                       />

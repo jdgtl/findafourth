@@ -1,31 +1,12 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { format, parseISO } from 'date-fns';
+import { getInitials, formatDate } from '@/lib/utils';
 import { Calendar, MapPin } from 'lucide-react';
 
-const AvailabilityCard = ({ post, onInvite, isOwn }) => {
-  const getInitials = (name) => {
-    if (!name) return '?';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
-  const formatDate = (dateStr) => {
-    try {
-      const date = parseISO(dateStr);
-      return format(date, 'EEE, MMM d');
-    } catch {
-      return dateStr;
-    }
-  };
-
+const AvailabilityCard = memo(({ post, onInvite, isOwn }) => {
   return (
     <Card data-testid="availability-card">
       <CardContent className="p-4">
@@ -77,6 +58,6 @@ const AvailabilityCard = ({ post, onInvite, isOwn }) => {
       </CardContent>
     </Card>
   );
-};
+});
 
 export default AvailabilityCard;

@@ -1,28 +1,45 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Request, Response
+from fastapi import Path as PathParam
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, field_validator
+from enum import Enum
 from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
 import bcrypt
 import jwt
+import re
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+# Startup validation for required environment variables
+def validate_env_vars():
+    """Validate all required environment variables are set."""
+    required_vars = ['MONGO_URL', 'JWT_SECRET', 'CORS_ORIGINS']
+    missing = [var for var in required_vars if not os.environ.get(var)]
+    if missing:
+        raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+
+validate_env_vars()
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ.get('DB_NAME', 'needafourth')]
 
-# JWT Configuration
-JWT_SECRET = os.environ.get('JWT_SECRET', 'needafourth-secret-key-change-in-production')
+# JWT Configuration - JWT_SECRET is now required (no fallback)
+JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24 * 7  # 7 days
 
@@ -35,6 +52,33 @@ api_router = APIRouter(prefix="/api")
 # Security
 security = HTTPBearer()
 
+# Rate Limiting Configuration
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Security Headers Middleware
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses."""
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        return response
+
+# Request ID Middleware
+class RequestIdMiddleware(BaseHTTPMiddleware):
+    """Add request ID to all requests for tracing."""
+    async def dispatch(self, request: Request, call_next):
+        request_id = str(uuid.uuid4())
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -42,42 +86,127 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ==================== UUID VALIDATION ====================
+
+def validate_uuid(value: str, param_name: str = "id") -> str:
+    """Validate that a string is a valid UUID4 format."""
+    try:
+        uuid.UUID(value, version=4)
+        return value
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid {param_name} format. Must be a valid UUID."
+        )
+
+# Type alias for validated UUID path parameters
+ValidUUID = PathParam(..., min_length=36, max_length=36, pattern=r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+
 # ==================== MODELS ====================
+
+# Enums for validation
+class VisibilityType(str, Enum):
+    EVERYONE = "everyone"
+    CREWS_ONLY = "crews_only"
+    HIDDEN = "hidden"
+
+class CrewType(str, Enum):
+    OPEN = "open"
+    INVITE_ONLY = "invite_only"
+
+class RequestMode(str, Enum):
+    QUICK_FILL = "quick_fill"
+    ORGANIZER_PICKS = "organizer_picks"
+
+class AudienceType(str, Enum):
+    CREWS = "crews"
+    CLUB = "club"
+    REGIONAL = "regional"
+
+class RequestStatus(str, Enum):
+    OPEN = "open"
+    FILLED = "filled"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+class ResponseStatus(str, Enum):
+    INTERESTED = "interested"
+    CONFIRMED = "confirmed"
+    PASSED = "passed"
+
+# Validation constants
+MAX_NAME_LENGTH = 100
+MAX_PHONE_LENGTH = 20
+MAX_CLUB_LENGTH = 100
+MAX_NOTES_LENGTH = 500
+MAX_COURT_LENGTH = 50
+MAX_OTHER_CLUBS = 10
+MIN_PTI = 1
+MAX_PTI = 100
+MIN_PASSWORD_LENGTH = 8
+MAX_PASSWORD_LENGTH = 128
 
 # Player Models
 class PlayerBase(BaseModel):
     email: EmailStr
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    home_club: Optional[str] = None
-    other_clubs: List[str] = []
-    pti: Optional[int] = None
+    name: Optional[str] = Field(None, max_length=MAX_NAME_LENGTH)
+    phone: Optional[str] = Field(None, max_length=MAX_PHONE_LENGTH)
+    home_club: Optional[str] = Field(None, max_length=MAX_CLUB_LENGTH)
+    other_clubs: List[str] = Field(default_factory=list, max_length=MAX_OTHER_CLUBS)
+    pti: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
     notify_push: bool = True
     notify_sms: bool = False
     notify_email: bool = True
-    visibility: str = "everyone"  # everyone, crews_only, hidden
+    visibility: VisibilityType = VisibilityType.EVERYONE
+
+    @field_validator('other_clubs')
+    @classmethod
+    def validate_other_clubs(cls, v):
+        if v:
+            for club in v:
+                if len(club) > MAX_CLUB_LENGTH:
+                    raise ValueError(f'Club name must be {MAX_CLUB_LENGTH} characters or less')
+        return v
 
 class PlayerCreate(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=MIN_PASSWORD_LENGTH, max_length=MAX_PASSWORD_LENGTH)
 
 class PlayerProfile(BaseModel):
-    name: str
-    home_club: str
-    other_clubs: List[str] = []
-    pti: Optional[int] = None
-    phone: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=MAX_NAME_LENGTH)
+    home_club: str = Field(..., min_length=1, max_length=MAX_CLUB_LENGTH)
+    other_clubs: List[str] = Field(default_factory=list, max_length=MAX_OTHER_CLUBS)
+    pti: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
+    phone: Optional[str] = Field(None, max_length=MAX_PHONE_LENGTH)
+
+    @field_validator('other_clubs')
+    @classmethod
+    def validate_other_clubs(cls, v):
+        if v:
+            for club in v:
+                if len(club) > MAX_CLUB_LENGTH:
+                    raise ValueError(f'Club name must be {MAX_CLUB_LENGTH} characters or less')
+        return v
 
 class PlayerUpdate(BaseModel):
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    home_club: Optional[str] = None
-    other_clubs: Optional[List[str]] = None
-    pti: Optional[int] = None
+    name: Optional[str] = Field(None, max_length=MAX_NAME_LENGTH)
+    phone: Optional[str] = Field(None, max_length=MAX_PHONE_LENGTH)
+    home_club: Optional[str] = Field(None, max_length=MAX_CLUB_LENGTH)
+    other_clubs: Optional[List[str]] = Field(None, max_length=MAX_OTHER_CLUBS)
+    pti: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
     notify_push: Optional[bool] = None
     notify_sms: Optional[bool] = None
     notify_email: Optional[bool] = None
-    visibility: Optional[str] = None
+    visibility: Optional[VisibilityType] = None
+
+    @field_validator('other_clubs')
+    @classmethod
+    def validate_other_clubs(cls, v):
+        if v:
+            for club in v:
+                if len(club) > MAX_CLUB_LENGTH:
+                    raise ValueError(f'Club name must be {MAX_CLUB_LENGTH} characters or less')
+        return v
 
 class Player(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -113,19 +242,21 @@ class TokenResponse(BaseModel):
     player: dict
 
 # Crew Models
+MAX_CREW_NAME_LENGTH = 100
+
 class CrewCreate(BaseModel):
-    name: str
-    type: str = "invite_only"  # open, invite_only
+    name: str = Field(..., min_length=1, max_length=MAX_CREW_NAME_LENGTH)
+    type: CrewType = CrewType.INVITE_ONLY
 
 class CrewUpdate(BaseModel):
-    name: Optional[str] = None
-    type: Optional[str] = None
+    name: Optional[str] = Field(None, max_length=MAX_CREW_NAME_LENGTH)
+    type: Optional[CrewType] = None
 
 class Crew(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str
+    name: str = Field(..., max_length=MAX_CREW_NAME_LENGTH)
     created_by: str
-    type: str = "invite_only"
+    type: CrewType = CrewType.INVITE_ONLY
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class CrewMember(BaseModel):
@@ -142,70 +273,90 @@ class Favorite(BaseModel):
 # Request Models
 class RequestCreate(BaseModel):
     date_time: datetime
-    club: str
-    court: Optional[str] = None
+    club: str = Field(..., min_length=1, max_length=MAX_CLUB_LENGTH)
+    court: Optional[str] = Field(None, max_length=MAX_COURT_LENGTH)
     spots_needed: int = Field(ge=1, le=3)
-    skill_min: Optional[int] = None
-    skill_max: Optional[int] = None
-    mode: str = "quick_fill"  # quick_fill, organizer_picks
-    audience: str = "crews"  # crews, club, regional
-    target_crew_ids: List[str] = []
-    notes: Optional[str] = None
+    skill_min: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
+    skill_max: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
+    mode: RequestMode = RequestMode.QUICK_FILL
+    audience: AudienceType = AudienceType.CREWS
+    target_crew_ids: List[str] = Field(default_factory=list)
+    notes: Optional[str] = Field(None, max_length=MAX_NOTES_LENGTH)
+
+    @field_validator('skill_max')
+    @classmethod
+    def validate_skill_range(cls, v, info):
+        if v is not None and info.data.get('skill_min') is not None:
+            if v < info.data['skill_min']:
+                raise ValueError('skill_max must be greater than or equal to skill_min')
+        return v
 
 class RequestUpdate(BaseModel):
-    court: Optional[str] = None
-    skill_min: Optional[int] = None
-    skill_max: Optional[int] = None
-    audience: Optional[str] = None
+    court: Optional[str] = Field(None, max_length=MAX_COURT_LENGTH)
+    skill_min: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
+    skill_max: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
+    audience: Optional[AudienceType] = None
     target_crew_ids: Optional[List[str]] = None
-    notes: Optional[str] = None
-    status: Optional[str] = None
+    notes: Optional[str] = Field(None, max_length=MAX_NOTES_LENGTH)
+    status: Optional[RequestStatus] = None
 
 class GameRequest(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     organizer_id: str
     date_time: datetime
-    club: str
-    court: Optional[str] = None
-    spots_needed: int
-    spots_filled: int = 0
-    skill_min: Optional[int] = None
-    skill_max: Optional[int] = None
-    mode: str = "quick_fill"
-    audience: str = "crews"
-    target_crew_ids: List[str] = []
-    status: str = "open"  # open, filled, cancelled, expired
-    notes: Optional[str] = None
+    club: str = Field(..., max_length=MAX_CLUB_LENGTH)
+    court: Optional[str] = Field(None, max_length=MAX_COURT_LENGTH)
+    spots_needed: int = Field(ge=1, le=3)
+    spots_filled: int = Field(default=0, ge=0)
+    skill_min: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
+    skill_max: Optional[int] = Field(None, ge=MIN_PTI, le=MAX_PTI)
+    mode: RequestMode = RequestMode.QUICK_FILL
+    audience: AudienceType = AudienceType.CREWS
+    target_crew_ids: List[str] = Field(default_factory=list)
+    status: RequestStatus = RequestStatus.OPEN
+    notes: Optional[str] = Field(None, max_length=MAX_NOTES_LENGTH)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # Response Models
 class ResponseCreate(BaseModel):
-    status: str = "interested"  # interested, confirmed, passed
+    status: ResponseStatus = ResponseStatus.INTERESTED
 
 class ResponseUpdate(BaseModel):
-    status: str  # interested, confirmed, passed
+    status: ResponseStatus
 
 class GameResponse(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     request_id: str
     player_id: str
-    status: str = "interested"
+    status: ResponseStatus = ResponseStatus.INTERESTED
     responded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # Availability Models
+MAX_MESSAGE_LENGTH = 300
+DATE_REGEX = r'^\d{4}-\d{2}-\d{2}$'
+
 class AvailabilityCreate(BaseModel):
-    message: str
-    available_date: str  # YYYY-MM-DD format
-    clubs: List[str] = []
+    message: str = Field(..., min_length=1, max_length=MAX_MESSAGE_LENGTH)
+    available_date: str = Field(..., pattern=DATE_REGEX)  # YYYY-MM-DD format
+    clubs: List[str] = Field(default_factory=list, max_length=MAX_OTHER_CLUBS)
     expires_at: Optional[datetime] = None
+
+    @field_validator('clubs')
+    @classmethod
+    def validate_clubs(cls, v):
+        if v:
+            for club in v:
+                if len(club) > MAX_CLUB_LENGTH:
+                    raise ValueError(f'Club name must be {MAX_CLUB_LENGTH} characters or less')
+        return v
 
 class AvailabilityPost(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     player_id: str
-    message: str
-    available_date: str
-    clubs: List[str] = []
+    message: str = Field(..., max_length=MAX_MESSAGE_LENGTH)
+    available_date: str = Field(..., pattern=DATE_REGEX)
+    clubs: List[str] = Field(default_factory=list)
     expires_at: datetime
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -291,7 +442,8 @@ async def notify_player(player: dict, title: str, body: str):
 # ==================== AUTH ROUTES ====================
 
 @api_router.post("/auth/register", response_model=TokenResponse)
-async def register(data: PlayerCreate):
+@limiter.limit("10/minute")
+async def register(request: Request, data: PlayerCreate):
     # Check if email already exists
     existing = await db.players.find_one({"email": data.email})
     if existing:
@@ -329,7 +481,8 @@ async def register(data: PlayerCreate):
     return TokenResponse(access_token=token, player=player_doc)
 
 @api_router.post("/auth/login", response_model=TokenResponse)
-async def login(data: LoginRequest):
+@limiter.limit("10/minute")
+async def login(request: Request, data: LoginRequest):
     player = await db.players.find_one({"email": data.email})
     if not player:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -377,9 +530,11 @@ async def list_players(
     current_player: dict = Depends(get_current_player)
 ):
     query = {"profile_complete": True}
-    
+
     if search:
-        query["name"] = {"$regex": search, "$options": "i"}
+        # Escape regex special characters to prevent ReDoS attacks
+        escaped_search = re.escape(search)
+        query["name"] = {"$regex": escaped_search, "$options": "i"}
     if club:
         query["$or"] = [{"home_club": club}, {"other_clubs": club}]
     
@@ -426,20 +581,34 @@ async def delete_player(player_id: str, current_player: dict = Depends(get_curre
 
 @api_router.get("/crews")
 async def list_crews(current_player: dict = Depends(get_current_player)):
-    # Get crews the player is a member of
+    # Get crews the player is a member of (single query)
     memberships = await db.crew_members.find({"player_id": current_player['id']}).to_list(1000)
-    crew_ids = [m['crew_id'] for m in memberships]
-    
-    # Get all crews (for open crews discovery)
-    all_crews = await db.crews.find({}, {"_id": 0}).to_list(1000)
-    
-    # Add member count and membership status to each crew
+    my_crew_ids = set(m['crew_id'] for m in memberships)
+
+    # Use aggregation pipeline to get all crews with member counts in one query
+    pipeline = [
+        {"$lookup": {
+            "from": "crew_members",
+            "localField": "id",
+            "foreignField": "crew_id",
+            "as": "members"
+        }},
+        {"$addFields": {
+            "member_count": {"$size": "$members"}
+        }},
+        {"$project": {
+            "_id": 0,
+            "members": 0  # Remove the members array, we only need the count
+        }}
+    ]
+
+    all_crews = await db.crews.aggregate(pipeline).to_list(1000)
+
+    # Add membership and creator status
     for crew in all_crews:
-        members = await db.crew_members.find({"crew_id": crew['id']}).to_list(1000)
-        crew['member_count'] = len(members)
-        crew['is_member'] = crew['id'] in crew_ids
+        crew['is_member'] = crew['id'] in my_crew_ids
         crew['is_creator'] = crew['created_by'] == current_player['id']
-    
+
     return all_crews
 
 @api_router.post("/crews")
@@ -737,21 +906,36 @@ async def list_requests(current_player: dict = Depends(get_current_player)):
             if in_range:
                 filtered_requests.append(req)
     
-    # Add organizer info and response status to each request
-    for req in filtered_requests:
-        organizer = await db.players.find_one({"id": req['organizer_id']}, {"_id": 0, "password_hash": 0})
-        req['organizer'] = organizer
-        
-        # Check if current player has responded
-        response = await db.responses.find_one({
-            "request_id": req['id'],
-            "player_id": current_player['id']
-        }, {"_id": 0})
-        req['my_response'] = response
-    
+    # Batch fetch all organizers and responses to avoid N+1 queries
+    if filtered_requests:
+        # Get unique organizer IDs
+        organizer_ids = list(set(req['organizer_id'] for req in filtered_requests))
+
+        # Batch fetch all organizers in one query
+        organizers_list = await db.players.find(
+            {"id": {"$in": organizer_ids}},
+            {"_id": 0, "password_hash": 0}
+        ).to_list(1000)
+        organizers_map = {o['id']: o for o in organizers_list}
+
+        # Get all request IDs
+        request_ids = [req['id'] for req in filtered_requests]
+
+        # Batch fetch all responses for current player in one query
+        responses_list = await db.responses.find(
+            {"request_id": {"$in": request_ids}, "player_id": current_player['id']},
+            {"_id": 0}
+        ).to_list(1000)
+        responses_map = {r['request_id']: r for r in responses_list}
+
+        # Add organizer and response info to each request
+        for req in filtered_requests:
+            req['organizer'] = organizers_map.get(req['organizer_id'])
+            req['my_response'] = responses_map.get(req['id'])
+
     # Sort by date_time
     filtered_requests.sort(key=lambda x: x['date_time'])
-    
+
     return filtered_requests
 
 @api_router.post("/requests")
@@ -789,19 +973,22 @@ async def create_request(data: RequestCreate, current_player: dict = Depends(get
 async def notify_request_audience(request: dict, organizer: dict):
     """Notify players based on request audience"""
     player_ids_to_notify = set()
-    
+    target_crew_ids = request.get('target_crew_ids', [])
+
     if request['audience'] == 'crews':
-        # Get members of target crews
-        for crew_id in request.get('target_crew_ids', []):
-            members = await db.crew_members.find({"crew_id": crew_id}).to_list(1000)
+        # Batch fetch members of all target crews in one query
+        if target_crew_ids:
+            members = await db.crew_members.find(
+                {"crew_id": {"$in": target_crew_ids}}
+            ).to_list(1000)
             for m in members:
                 player_ids_to_notify.add(m['player_id'])
-        
+
         # Also notify favorites
         favorites = await db.favorites.find({"player_id": organizer['id']}).to_list(1000)
         for f in favorites:
             player_ids_to_notify.add(f['favorite_player_id'])
-    
+
     elif request['audience'] == 'club':
         # Get players at the same club
         players = await db.players.find({
@@ -813,46 +1000,69 @@ async def notify_request_audience(request: dict, organizer: dict):
         }).to_list(1000)
         for p in players:
             player_ids_to_notify.add(p['id'])
-    
+
     elif request['audience'] == 'regional':
         # Notify everyone (with profile complete)
         players = await db.players.find({"profile_complete": True}).to_list(1000)
         for p in players:
             player_ids_to_notify.add(p['id'])
-    
+
     # Remove organizer from notifications
     player_ids_to_notify.discard(organizer['id'])
-    
-    # Filter by visibility and skill
+
+    if not player_ids_to_notify:
+        return
+
+    # Batch fetch all players to notify in one query
+    players_list = await db.players.find(
+        {"id": {"$in": list(player_ids_to_notify)}}
+    ).to_list(1000)
+    players_map = {p['id']: p for p in players_list}
+
+    # For crews_only visibility, batch fetch all memberships
+    crews_only_player_ids = [
+        pid for pid in player_ids_to_notify
+        if players_map.get(pid, {}).get('visibility') == 'crews_only'
+    ]
+    membership_map = {}
+    if crews_only_player_ids:
+        memberships = await db.crew_members.find(
+            {"player_id": {"$in": crews_only_player_ids}}
+        ).to_list(1000)
+        for m in memberships:
+            if m['player_id'] not in membership_map:
+                membership_map[m['player_id']] = []
+            membership_map[m['player_id']].append(m['crew_id'])
+
+    # Filter by visibility and skill, then send notifications
+    skill_min = request.get('skill_min')
+    skill_max = request.get('skill_max')
+    time_str = request['date_time'].split('T')[1][:5] if 'T' in request['date_time'] else request['date_time']
+
     for player_id in player_ids_to_notify:
-        player = await db.players.find_one({"id": player_id})
+        player = players_map.get(player_id)
         if not player:
             continue
-        
+
         # Check visibility
         if player.get('visibility') == 'hidden':
             continue
         if player.get('visibility') == 'crews_only':
             # Check if player is in one of the target crews
-            memberships = await db.crew_members.find({"player_id": player_id}).to_list(1000)
-            player_crew_ids = [m['crew_id'] for m in memberships]
-            if not any(cid in request.get('target_crew_ids', []) for cid in player_crew_ids):
+            player_crew_ids = membership_map.get(player_id, [])
+            if not any(cid in target_crew_ids for cid in player_crew_ids):
                 continue
-        
+
         # Check skill filter
-        skill_min = request.get('skill_min')
-        skill_max = request.get('skill_max')
         player_pti = player.get('pti')
-        
         if skill_min is not None or skill_max is not None:
             if player_pti is not None:
                 if skill_min is not None and player_pti < skill_min:
                     continue
                 if skill_max is not None and player_pti > skill_max:
                     continue
-        
+
         # Send notification
-        time_str = request['date_time'].split('T')[1][:5] if 'T' in request['date_time'] else request['date_time']
         await notify_player(
             player,
             f"{organizer.get('name', 'Someone')} needs players",
@@ -1189,10 +1399,14 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=os.environ['CORS_ORIGINS'].split(','),  # No fallback - required env var
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add security middleware
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestIdMiddleware)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
