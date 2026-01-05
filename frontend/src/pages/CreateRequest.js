@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { requestAPI, crewAPI, utilityAPI } from '@/lib/api';
+import { requestAPI, crewAPI } from '@/lib/api';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,8 +12,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Slider } from '@/components/ui/slider';
-import { Loader2, ArrowLeft, Info, ChevronLeft, ChevronRight } from 'lucide-react';
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isBefore, startOfDay } from 'date-fns';
+import { Loader2, ArrowLeft, Info, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday, isBefore, startOfDay } from 'date-fns';
 
 const CreateRequest = () => {
   const navigate = useNavigate();
@@ -23,7 +23,10 @@ const CreateRequest = () => {
   // Form state
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [calendarMonth, setCalendarMonth] = useState(new Date());
-  const [time, setTime] = useState('19:00');
+  const [selectedHour, setSelectedHour] = useState(7);
+  const [selectedMinute, setSelectedMinute] = useState(0);
+  const [selectedPeriod, setSelectedPeriod] = useState('PM');
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const [club, setClub] = useState(location.state?.club || player?.home_club || '');
   const [court, setCourt] = useState('');
   const [spotsNeeded, setSpotsNeeded] = useState(1);
@@ -31,6 +34,7 @@ const CreateRequest = () => {
   const [skillRange, setSkillRange] = useState([20, 60]);
   const [audience, setAudience] = useState('crews');
   const [selectedCrews, setSelectedCrews] = useState([]);
+  const [includeFavorites, setIncludeFavorites] = useState(true);
   const [mode, setMode] = useState('quick_fill');
   const [notes, setNotes] = useState('');
 
@@ -39,20 +43,22 @@ const CreateRequest = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Time options (15 min intervals)
-  const timeOptions = [];
-  for (let h = 6; h <= 23; h++) {
-    for (let m = 0; m < 60; m += 15) {
-      const hour = h.toString().padStart(2, '0');
-      const min = m.toString().padStart(2, '0');
-      const displayHour = h > 12 ? h - 12 : h === 0 ? 12 : h;
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      timeOptions.push({
-        value: `${hour}:${min}`,
-        label: `${displayHour}:${min} ${ampm}`
-      });
-    }
-  }
+  // Hours for time picker (1-12)
+  const hours = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+  // Minutes for time picker (15 min intervals)
+  const minutes = [0, 15, 30, 45];
+
+  const getDisplayTime = () => {
+    const min = selectedMinute.toString().padStart(2, '0');
+    return `${selectedHour}:${min} ${selectedPeriod}`;
+  };
+
+  const get24Hour = () => {
+    let hour = selectedHour;
+    if (selectedPeriod === 'PM' && hour !== 12) hour += 12;
+    if (selectedPeriod === 'AM' && hour === 12) hour = 0;
+    return hour;
+  };
 
   useEffect(() => {
     loadData();
@@ -86,7 +92,10 @@ const CreateRequest = () => {
 
     // Create datetime
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
-    const dateTime = new Date(`${dateStr}T${time}:00`);
+    const hour24 = get24Hour().toString().padStart(2, '0');
+    const min = selectedMinute.toString().padStart(2, '0');
+    const dateTime = new Date(`${dateStr}T${hour24}:${min}:00`);
+    
     if (dateTime <= new Date()) {
       setError('Date and time must be in the future');
       return;
@@ -126,7 +135,7 @@ const CreateRequest = () => {
 
   const getStartPadding = () => {
     const start = startOfMonth(calendarMonth);
-    return start.getDay(); // 0 = Sunday
+    return start.getDay();
   };
 
   const isDateDisabled = (date) => {
@@ -202,12 +211,10 @@ const CreateRequest = () => {
                     
                     {/* Calendar Days */}
                     <div className="grid grid-cols-7 gap-1">
-                      {/* Padding for start of month */}
                       {Array.from({ length: getStartPadding() }).map((_, i) => (
                         <div key={`pad-${i}`} className="h-11" />
                       ))}
                       
-                      {/* Actual days */}
                       {getDaysInMonth().map((day) => {
                         const isSelected = isSameDay(day, selectedDate);
                         const isCurrentDay = isToday(day);
@@ -238,26 +245,99 @@ const CreateRequest = () => {
                   </div>
                 </div>
 
-                {/* Time Picker */}
+                {/* Custom Time Picker */}
                 <div className="space-y-2">
-                  <Label htmlFor="time">Time</Label>
-                  <select
-                    id="time"
-                    value={time}
-                    onChange={(e) => setTime(e.target.value)}
-                    className="w-full h-12 px-3 text-base border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none"
-                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', backgroundSize: '20px' }}
-                    data-testid="time-input"
-                  >
-                    {timeOptions.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
+                  <Label>Time</Label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowTimePicker(!showTimePicker)}
+                      className="w-full h-12 px-4 text-left text-base border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-lg flex items-center justify-between"
+                    >
+                      <span>{getDisplayTime()}</span>
+                      <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${showTimePicker ? 'rotate-180' : ''}`} />
+                    </button>
+                    
+                    {showTimePicker && (
+                      <div className="absolute z-50 top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-4">
+                        <div className="flex gap-2">
+                          {/* Hour */}
+                          <div className="flex-1">
+                            <Label className="text-xs text-gray-500 mb-2 block">Hour</Label>
+                            <div className="grid grid-cols-4 gap-1">
+                              {hours.map((h) => (
+                                <button
+                                  key={h}
+                                  type="button"
+                                  onClick={() => setSelectedHour(h)}
+                                  className={`h-10 rounded text-sm font-medium ${
+                                    selectedHour === h 
+                                      ? 'bg-emerald-500 text-white' 
+                                      : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                  }`}
+                                >
+                                  {h}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          {/* Minute */}
+                          <div className="w-20">
+                            <Label className="text-xs text-gray-500 mb-2 block">Min</Label>
+                            <div className="grid grid-cols-1 gap-1">
+                              {minutes.map((m) => (
+                                <button
+                                  key={m}
+                                  type="button"
+                                  onClick={() => setSelectedMinute(m)}
+                                  className={`h-10 rounded text-sm font-medium ${
+                                    selectedMinute === m 
+                                      ? 'bg-emerald-500 text-white' 
+                                      : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                  }`}
+                                >
+                                  :{m.toString().padStart(2, '0')}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          {/* AM/PM */}
+                          <div className="w-16">
+                            <Label className="text-xs text-gray-500 mb-2 block">Period</Label>
+                            <div className="grid grid-cols-1 gap-1">
+                              {['AM', 'PM'].map((p) => (
+                                <button
+                                  key={p}
+                                  type="button"
+                                  onClick={() => setSelectedPeriod(p)}
+                                  className={`h-10 rounded text-sm font-medium ${
+                                    selectedPeriod === p 
+                                      ? 'bg-emerald-500 text-white' 
+                                      : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                  }`}
+                                >
+                                  {p}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <Button
+                          type="button"
+                          className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700"
+                          onClick={() => setShowTimePicker(false)}
+                        >
+                          Done
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* Club - Plain text input */}
+                {/* Club */}
                 <div className="space-y-2">
                   <Label htmlFor="club">Club</Label>
                   <Input
@@ -368,7 +448,7 @@ const CreateRequest = () => {
                   onClick={() => setAudience('crews')}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
                       audience === 'crews' 
                         ? 'border-emerald-500 bg-emerald-500' 
                         : 'border-gray-300'
@@ -380,9 +460,23 @@ const CreateRequest = () => {
                     <span className="font-medium">My Crews</span>
                   </div>
                   
-                  {/* Crew checkboxes - show when crews is selected */}
-                  {audience === 'crews' && crews.length > 0 && (
+                  {/* Favorites & Crew checkboxes */}
+                  {audience === 'crews' && (
                     <div className="mt-4 ml-8 space-y-3">
+                      {/* Favorites option */}
+                      <label 
+                        className="flex items-center gap-3 cursor-pointer"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={includeFavorites}
+                          onCheckedChange={setIncludeFavorites}
+                          className="data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
+                        />
+                        <span className="text-sm">Favorites</span>
+                      </label>
+                      
+                      {/* Crew options */}
                       {crews.map((crew) => (
                         <label 
                           key={crew.id} 
@@ -399,13 +493,13 @@ const CreateRequest = () => {
                           </span>
                         </label>
                       ))}
+                      
+                      {crews.length === 0 && (
+                        <p className="text-sm text-gray-500">
+                          No crews yet - Favorites will still receive your request
+                        </p>
+                      )}
                     </div>
-                  )}
-                  
-                  {audience === 'crews' && crews.length === 0 && (
-                    <p className="mt-3 ml-8 text-sm text-gray-500">
-                      You haven't joined any crews yet
-                    </p>
                   )}
                 </div>
 
@@ -419,7 +513,7 @@ const CreateRequest = () => {
                   onClick={() => setAudience('club')}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
                       audience === 'club' 
                         ? 'border-emerald-500 bg-emerald-500' 
                         : 'border-gray-300'
@@ -442,7 +536,7 @@ const CreateRequest = () => {
                   onClick={() => setAudience('regional')}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
                       audience === 'regional' 
                         ? 'border-emerald-500 bg-emerald-500' 
                         : 'border-gray-300'
@@ -470,7 +564,7 @@ const CreateRequest = () => {
                   onClick={() => setMode('quick_fill')}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
                       mode === 'quick_fill' 
                         ? 'border-emerald-500 bg-emerald-500' 
                         : 'border-gray-300'
@@ -496,7 +590,7 @@ const CreateRequest = () => {
                   onClick={() => setMode('organizer_picks')}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
                       mode === 'organizer_picks' 
                         ? 'border-emerald-500 bg-emerald-500' 
                         : 'border-gray-300'
