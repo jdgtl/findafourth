@@ -77,7 +77,7 @@ const Home = () => {
 
   return (
     <AppLayout>
-      <div className="max-w-2xl mx-auto space-y-6" data-testid="home-page">
+      <div className="max-w-2xl mx-auto space-y-6 pb-24" data-testid="home-page">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
