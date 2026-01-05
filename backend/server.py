@@ -1,4 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi import Path as PathParam
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -53,6 +54,22 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# ==================== UUID VALIDATION ====================
+
+def validate_uuid(value: str, param_name: str = "id") -> str:
+    """Validate that a string is a valid UUID4 format."""
+    try:
+        uuid.UUID(value, version=4)
+        return value
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid {param_name} format. Must be a valid UUID."
+        )
+
+# Type alias for validated UUID path parameters
+ValidUUID = PathParam(..., min_length=36, max_length=36, pattern=r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
 
 # ==================== MODELS ====================
 
