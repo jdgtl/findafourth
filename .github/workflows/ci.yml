@@ -40,6 +40,16 @@ jobs:
           JWT_SECRET: test-secret-for-ci
           CORS_ORIGINS: http://localhost:3000
 
+      - name: Run tests
+        run: |
+          cd backend
+          pytest --cov=. --cov-report=xml
+        env:
+          MONGO_URL: mongodb://localhost:27017
+          JWT_SECRET: test-secret-for-ci
+          CORS_ORIGINS: http://localhost:3000
+        continue-on-error: true
+
   frontend:
     runs-on: ubuntu-latest
 
