@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { requestAPI, availabilityAPI } from '@/lib/api';
+import { getErrorMessage, logError } from '@/lib/errors';
 import AppLayout from '@/components/AppLayout';
 import RequestCard from '@/components/RequestCard';
 import AvailabilityCard from '@/components/AvailabilityCard';
@@ -36,7 +38,10 @@ const Home = () => {
       setRequests(requestsRes.data);
       setAvailability(availabilityRes.data);
     } catch (err) {
-      console.error('Failed to fetch data:', err);
+      logError('Home.fetchData', err);
+      if (showRefresh) {
+        toast.error('Failed to refresh data');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -54,8 +59,10 @@ const Home = () => {
     try {
       await requestAPI.respond(requestId);
       fetchData();
+      toast.success("You're in!");
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to respond');
+      logError('Home.handleRespond', err);
+      toast.error(getErrorMessage(err, 'Failed to respond'));
     }
   };
 

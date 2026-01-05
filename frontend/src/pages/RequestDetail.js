@@ -3,10 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { requestAPI } from '@/lib/api';
 import AppLayout from '@/components/AppLayout';
+import PlayerAvatar from '@/components/PlayerAvatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -107,16 +107,6 @@ const RequestDetail = () => {
     } finally {
       setActionLoading(false);
     }
-  };
-
-  const getInitials = (name) => {
-    if (!name) return '?';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
   };
 
   const getStatusBadge = (status) => {
@@ -240,11 +230,7 @@ const RequestDetail = () => {
 
             {/* Organizer Info */}
             <div className="flex items-center gap-3 pt-2 border-t">
-              <Avatar>
-                <AvatarFallback className="bg-emerald-100 text-emerald-700">
-                  {getInitials(request.organizer?.name)}
-                </AvatarFallback>
-              </Avatar>
+              <PlayerAvatar name={request.organizer?.name} size="lg" />
               <div>
                 <p className="font-medium">
                   {isOrganizer ? 'You' : request.organizer?.name}
@@ -312,11 +298,7 @@ const RequestDetail = () => {
                         className="flex items-center justify-between"
                       >
                         <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarFallback className="bg-emerald-100 text-emerald-700">
-                              {getInitials(response.player?.name)}
-                            </AvatarFallback>
-                          </Avatar>
+                          <PlayerAvatar name={response.player?.name} size="lg" />
                           <div>
                             <p className="font-medium">{response.player?.name}</p>
                             {response.player?.pti && (
@@ -349,11 +331,7 @@ const RequestDetail = () => {
                         className="flex items-center justify-between"
                       >
                         <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarFallback className="bg-amber-100 text-amber-700">
-                              {getInitials(response.player?.name)}
-                            </AvatarFallback>
-                          </Avatar>
+                          <PlayerAvatar name={response.player?.name} size="lg" variant="amber" />
                           <div>
                             <p className="font-medium">{response.player?.name}</p>
                             {response.player?.pti && (

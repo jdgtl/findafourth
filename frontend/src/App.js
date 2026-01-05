@@ -3,6 +3,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Toaster } from "@/components/ui/sonner";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 // Pages
 import Landing from "@/pages/Landing";
@@ -183,14 +184,16 @@ function AppRoutes() {
 
 function App() {
   return (
-    <div className="App">
-      <BrowserRouter>
-        <AuthProvider>
-          <AppRoutes />
-          <Toaster position="top-center" />
-        </AuthProvider>
-      </BrowserRouter>
-    </div>
+    <ErrorBoundary>
+      <div className="App">
+        <BrowserRouter>
+          <AuthProvider>
+            <AppRoutes />
+            <Toaster position="top-center" />
+          </AuthProvider>
+        </BrowserRouter>
+      </div>
+    </ErrorBoundary>
   );
 }
 
