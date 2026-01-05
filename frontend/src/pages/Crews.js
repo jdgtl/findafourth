@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { crewAPI } from '@/lib/api';
+import { logError } from '@/lib/errors';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,7 +22,8 @@ const Crews = () => {
       const response = await crewAPI.list();
       setCrews(response.data);
     } catch (err) {
-      console.error('Failed to fetch crews:', err);
+      logError('Crews.fetch', err);
+      toast.error('Failed to load crews');
     } finally {
       setLoading(false);
     }

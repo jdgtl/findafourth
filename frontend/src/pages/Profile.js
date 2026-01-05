@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { playerAPI } from '@/lib/api';
+import { logError } from '@/lib/errors';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -268,8 +270,15 @@ const Profile = () => {
               <Switch
                 checked={notifyPush}
                 onCheckedChange={async (checked) => {
+                  const previousValue = notifyPush;
                   setNotifyPush(checked);
-                  await playerAPI.update(player.id, { notify_push: checked });
+                  try {
+                    await playerAPI.update(player.id, { notify_push: checked });
+                  } catch (err) {
+                    logError('Profile.togglePush', err);
+                    setNotifyPush(previousValue);
+                    toast.error('Failed to update notification settings');
+                  }
                 }}
               />
             </div>
@@ -281,8 +290,15 @@ const Profile = () => {
               <Switch
                 checked={notifyEmail}
                 onCheckedChange={async (checked) => {
+                  const previousValue = notifyEmail;
                   setNotifyEmail(checked);
-                  await playerAPI.update(player.id, { notify_email: checked });
+                  try {
+                    await playerAPI.update(player.id, { notify_email: checked });
+                  } catch (err) {
+                    logError('Profile.toggleEmail', err);
+                    setNotifyEmail(previousValue);
+                    toast.error('Failed to update notification settings');
+                  }
                 }}
               />
             </div>
@@ -297,8 +313,15 @@ const Profile = () => {
                 checked={notifySms}
                 disabled={!phone}
                 onCheckedChange={async (checked) => {
+                  const previousValue = notifySms;
                   setNotifySms(checked);
-                  await playerAPI.update(player.id, { notify_sms: checked });
+                  try {
+                    await playerAPI.update(player.id, { notify_sms: checked });
+                  } catch (err) {
+                    logError('Profile.toggleSms', err);
+                    setNotifySms(previousValue);
+                    toast.error('Failed to update notification settings');
+                  }
                 }}
               />
             </div>
@@ -318,9 +341,16 @@ const Profile = () => {
             <RadioGroup
               value={visibility}
               onValueChange={async (value) => {
+                const previousValue = visibility;
                 setVisibility(value);
-                await playerAPI.update(player.id, { visibility: value });
-                updatePlayer({ ...player, visibility: value });
+                try {
+                  await playerAPI.update(player.id, { visibility: value });
+                  updatePlayer({ ...player, visibility: value });
+                } catch (err) {
+                  logError('Profile.toggleVisibility', err);
+                  setVisibility(previousValue);
+                  toast.error('Failed to update visibility settings');
+                }
               }}
             >
               <div className="flex items-start space-x-2">

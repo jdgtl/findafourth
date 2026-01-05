@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { requestAPI, crewAPI } from '@/lib/api';
+import { logError } from '@/lib/errors';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -71,7 +73,8 @@ const CreateRequest = () => {
       setCrews(myCrews);
       setSelectedCrews(myCrews.map((c) => c.id));
     } catch (err) {
-      console.error('Failed to load data:', err);
+      logError('CreateRequest.loadData', err);
+      // Non-blocking error - crews are optional
     }
   };
 

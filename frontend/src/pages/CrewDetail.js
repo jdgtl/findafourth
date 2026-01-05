@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { crewAPI, playerAPI } from '@/lib/api';
+import { logError } from '@/lib/errors';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -83,7 +85,8 @@ const CrewDetail = () => {
       const memberIds = crew?.members?.map((m) => m.id) || [];
       setSearchResults(response.data.filter((p) => !memberIds.includes(p.id)));
     } catch (err) {
-      console.error('Search failed:', err);
+      logError('CrewDetail.search', err);
+      toast.error('Search failed');
     } finally {
       setSearching(false);
     }

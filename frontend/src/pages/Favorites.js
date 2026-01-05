@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { favoriteAPI, playerAPI } from '@/lib/api';
+import { logError } from '@/lib/errors';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,7 +36,8 @@ const Favorites = () => {
       const response = await favoriteAPI.list();
       setFavorites(response.data);
     } catch (err) {
-      console.error('Failed to fetch favorites:', err);
+      logError('Favorites.fetch', err);
+      toast.error('Failed to load favorites');
     } finally {
       setLoading(false);
     }
@@ -60,7 +63,8 @@ const Favorites = () => {
         response.data.filter((p) => p.id !== player?.id && !favoriteIds.includes(p.id))
       );
     } catch (err) {
-      console.error('Search failed:', err);
+      logError('Favorites.search', err);
+      toast.error('Search failed');
     } finally {
       setSearching(false);
     }
@@ -74,8 +78,10 @@ const Favorites = () => {
       setSearchQuery('');
       setSearchResults([]);
       fetchFavorites();
+      toast.success('Added to favorites');
     } catch (err) {
-      console.error('Failed to add favorite:', err);
+      logError('Favorites.add', err);
+      toast.error('Failed to add favorite');
     } finally {
       setActionLoading(false);
     }
@@ -86,8 +92,10 @@ const Favorites = () => {
     try {
       await favoriteAPI.remove(playerId);
       fetchFavorites();
+      toast.success('Removed from favorites');
     } catch (err) {
-      console.error('Failed to remove favorite:', err);
+      logError('Favorites.remove', err);
+      toast.error('Failed to remove favorite');
     } finally {
       setActionLoading(false);
     }
