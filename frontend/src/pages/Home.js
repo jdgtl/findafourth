@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, ChevronDown, ChevronUp, RefreshCw, Calendar, Users } from 'lucide-react';
+import { Plus, ChevronDown, ChevronUp, RefreshCw, Calendar, Users, CalendarCheck } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -59,8 +59,21 @@ const Home = () => {
     }
   };
 
+  // My requests (I'm the organizer)
   const myRequests = requests.filter((r) => r.organizer_id === player?.id);
-  const otherRequests = requests.filter((r) => r.organizer_id !== player?.id);
+  
+  // Games I've joined (I have a response - confirmed or interested)
+  const myGames = requests.filter((r) => 
+    r.organizer_id !== player?.id && 
+    r.my_response && 
+    (r.my_response.status === 'confirmed' || r.my_response.status === 'interested')
+  );
+  
+  // Open games I haven't responded to yet
+  const openGames = requests.filter((r) => 
+    r.organizer_id !== player?.id && 
+    !r.my_response
+  );
 
   return (
     <AppLayout>
@@ -81,7 +94,7 @@ const Home = () => {
           </Button>
         </div>
 
-        {/* My Active Requests */}
+        {/* My Active Requests (games I'm organizing) */}
         {myRequests.length > 0 && (
           <section>
             <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-3">
@@ -100,7 +113,28 @@ const Home = () => {
           </section>
         )}
 
-        {/* Active Requests */}
+        {/* My Games (games I've joined) */}
+        {myGames.length > 0 && (
+          <section>
+            <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+              <CalendarCheck className="w-5 h-5 text-emerald-600" />
+              My Games
+            </h2>
+            <div className="space-y-3">
+              {myGames.map((request) => (
+                <RequestCard
+                  key={request.id}
+                  request={request}
+                  isOrganizer={false}
+                  myResponse={request.my_response}
+                  onClick={() => navigate(`/requests/${request.id}`)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Open Games (games I can join) */}
         <section>
           <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-3">
             Open Games
@@ -117,7 +151,7 @@ const Home = () => {
                 </Card>
               ))}
             </div>
-          ) : otherRequests.length === 0 ? (
+          ) : openGames.length === 0 ? (
             <Card>
               <CardContent className="p-8 text-center">
                 <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -131,7 +165,7 @@ const Home = () => {
             </Card>
           ) : (
             <div className="space-y-3">
-              {otherRequests.map((request) => (
+              {openGames.map((request) => (
                 <RequestCard
                   key={request.id}
                   request={request}
