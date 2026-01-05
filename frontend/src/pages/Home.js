@@ -217,15 +217,14 @@ const Home = () => {
         </Collapsible>
 
         {/* Floating Action Button */}
-        <div className="fixed bottom-20 md:bottom-6 right-4 md:right-8">
+        <div className="fixed bottom-24 md:bottom-8 right-4 md:right-8 z-50">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
-                size="lg"
-                className="w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-700 shadow-lg"
+                className="w-16 h-16 rounded-full bg-emerald-600 hover:bg-emerald-700 shadow-lg p-0 flex items-center justify-center"
                 data-testid="fab-btn"
               >
-                <Plus className="w-6 h-6" />
+                <Plus className="w-7 h-7" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
