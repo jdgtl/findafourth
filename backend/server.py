@@ -670,31 +670,41 @@ async def list_requests(current_player: dict = Depends(get_current_player)):
     favorited_by = await db.favorites.find({"favorite_player_id": current_player['id']}).to_list(1000)
     favorited_by_ids = [f['player_id'] for f in favorited_by]
     
-    # Build query for visible requests
-    query = {
-        "status": "open",
-        "date_time": {"$gt": now.isoformat()}
-    }
+    # Get all requests the user has responded to (for "My Games" section)
+    user_responses = await db.responses.find({"player_id": current_player['id']}).to_list(1000)
+    responded_request_ids = [r['request_id'] for r in user_responses]
     
-    # Filter based on visibility settings
+    # Build query for visible requests - open requests OR requests user has responded to
+    base_query = {"date_time": {"$gt": now.isoformat()}}
+    
+    # Filter based on visibility settings for open games
     if current_player.get('visibility') == 'hidden':
         # Hidden players only see their own requests
-        query["organizer_id"] = current_player['id']
+        visibility_filter = [{"organizer_id": current_player['id']}]
     elif current_player.get('visibility') == 'crews_only':
         # Only see requests targeting their crews
-        query["$or"] = [
+        visibility_filter = [
             {"organizer_id": current_player['id']},
-            {"$and": [{"audience": "crews"}, {"target_crew_ids": {"$in": player_crew_ids}}]}
+            {"$and": [{"audience": "crews"}, {"target_crew_ids": {"$in": player_crew_ids}}, {"status": "open"}]}
         ]
     else:
-        # Everyone visibility - see all applicable requests
-        query["$or"] = [
+        # Everyone visibility - see all applicable open requests
+        visibility_filter = [
             {"organizer_id": current_player['id']},
-            {"audience": "regional"},
-            {"$and": [{"audience": "club"}, {"club": {"$in": [current_player.get('home_club')] + current_player.get('other_clubs', [])}}]},
-            {"$and": [{"audience": "crews"}, {"target_crew_ids": {"$in": player_crew_ids}}]},
-            {"organizer_id": {"$in": favorited_by_ids}}  # Requests from people who favorited me
+            {"$and": [{"audience": "regional"}, {"status": "open"}]},
+            {"$and": [{"audience": "club"}, {"club": {"$in": [current_player.get('home_club')] + current_player.get('other_clubs', [])}}, {"status": "open"}]},
+            {"$and": [{"audience": "crews"}, {"target_crew_ids": {"$in": player_crew_ids}}, {"status": "open"}]},
+            {"$and": [{"organizer_id": {"$in": favorited_by_ids}}, {"status": "open"}]}
         ]
+    
+    # Also include requests user has responded to (regardless of status, for My Games)
+    if responded_request_ids:
+        visibility_filter.append({"id": {"$in": responded_request_ids}})
+    
+    query = {
+        **base_query,
+        "$or": visibility_filter
+    }
     
     requests = await db.requests.find(query, {"_id": 0}).to_list(1000)
     
