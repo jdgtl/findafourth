@@ -1163,7 +1163,25 @@ async def delete_availability(post_id: str, current_player: dict = Depends(get_c
 
 def normalize_name(name: str) -> str:
     """Normalize a player name for comparison (lowercase, strip whitespace)"""
-    return name.strip().lower()
+    return ' '.join(name.strip().lower().split())  # Also normalize multiple spaces
+
+def fuzzy_match_score(query: str, target: str) -> float:
+    """Calculate fuzzy match score between two strings (0-100)"""
+    from difflib import SequenceMatcher
+    query = normalize_name(query)
+    target = normalize_name(target)
+    
+    # Exact match
+    if query == target:
+        return 100.0
+    
+    # Check if query is contained in target or vice versa
+    if query in target or target in query:
+        return 90.0
+    
+    # Use SequenceMatcher for fuzzy matching
+    ratio = SequenceMatcher(None, query, target).ratio() * 100
+    return ratio
 
 def dedupe_pti_players(players: List[dict]) -> List[dict]:
     """Deduplicate players by name and PTI value"""
