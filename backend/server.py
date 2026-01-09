@@ -1273,15 +1273,15 @@ Target URLs:
             prompt=prompt,
         )
         
-        # Process the result
-        if not result or not hasattr(result, 'cape_ann_paddle_team_roster'):
-            # Try to extract from dict if result is dict-like
-            roster_data = []
-            if isinstance(result, dict):
-                roster_data = result.get('cape_ann_paddle_team_roster', [])
-            elif hasattr(result, '__dict__'):
-                roster_data = getattr(result, 'cape_ann_paddle_team_roster', [])
-        else:
+        # Process the result - Firecrawl returns result with data attribute
+        roster_data = []
+        if hasattr(result, 'data') and result.data:
+            roster_data = result.data.get('cape_ann_paddle_team_roster', [])
+        elif isinstance(result, dict):
+            roster_data = result.get('cape_ann_paddle_team_roster', [])
+            if not roster_data and 'data' in result:
+                roster_data = result['data'].get('cape_ann_paddle_team_roster', [])
+        elif hasattr(result, 'cape_ann_paddle_team_roster'):
             roster_data = result.cape_ann_paddle_team_roster
         
         if not roster_data:
@@ -1291,10 +1291,12 @@ Target URLs:
             }
         
         # Process and deduplicate the scraped data
+        # Handle both field name formats: (name, pti) and (player_name, pti_value)
         processed_players = []
         for p in roster_data:
-            player_name = p.get('player_name', '').strip()
-            pti_value = p.get('pti_value')
+            # Try both field name formats
+            player_name = (p.get('player_name') or p.get('name') or '').strip()
+            pti_value = p.get('pti_value') if p.get('pti_value') is not None else p.get('pti')
             
             if not player_name:
                 continue
@@ -1308,7 +1310,7 @@ Target URLs:
             processed_players.append({
                 'player_name': player_name,
                 'pti_value': pti_value,
-                'source_url': p.get('player_name_url') or p.get('href') or None
+                'source_url': p.get('player_name_url') or p.get('href') or p.get('profile_initial_url') or None
             })
         
         # Deduplicate
