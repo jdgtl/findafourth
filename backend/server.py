@@ -28,6 +28,9 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'needafourth-secret-key-change-in-prod
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24 * 7  # 7 days
 
+# Firecrawl Configuration
+FIRECRAWL_API_KEY = os.environ.get('FIRECRAWL_API_KEY', '')
+
 # Create the main app
 app = FastAPI(title="NeedaFourth API")
 
