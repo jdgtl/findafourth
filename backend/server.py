@@ -1159,6 +1159,249 @@ async def delete_availability(post_id: str, current_player: dict = Depends(get_c
     
     return {"message": "Post deleted"}
 
+# ==================== PTI ROSTER ROUTES ====================
+
+def normalize_name(name: str) -> str:
+    """Normalize a player name for comparison (lowercase, strip whitespace)"""
+    return name.strip().lower()
+
+def dedupe_pti_players(players: List[dict]) -> List[dict]:
+    """Deduplicate players by name and PTI value"""
+    seen = set()
+    deduped = []
+    for player in players:
+        name = normalize_name(player.get('player_name', ''))
+        pti = player.get('pti_value')
+        key = (name, pti)
+        if key not in seen and name:
+            seen.add(key)
+            deduped.append(player)
+    return deduped
+
+@api_router.get("/admin/pti-roster")
+async def get_pti_roster(current_player: dict = Depends(get_current_player)):
+    """Get all PTI roster entries (scraped player data)"""
+    roster = await db.pti_roster.find({}, {"_id": 0}).to_list(1000)
+    return {"total": len(roster), "players": roster}
+
+@api_router.post("/admin/pti-roster/import")
+async def import_pti_roster(data: PTIImportRequest, current_player: dict = Depends(get_current_player)):
+    """Import PTI roster data from scraped JSON, with deduplication"""
+    if not data.players:
+        raise HTTPException(status_code=400, detail="No players provided")
+    
+    # Process and deduplicate players
+    processed_players = []
+    for p in data.players:
+        player_name = p.get('player_name', '').strip()
+        pti_value = p.get('pti_value')
+        
+        if not player_name:
+            continue
+        
+        # Handle PTI value - can be string or number
+        if pti_value is not None:
+            try:
+                pti_value = float(pti_value)
+            except (ValueError, TypeError):
+                pti_value = None
+        
+        processed_players.append({
+            'player_name': player_name,
+            'pti_value': pti_value,
+            'source_url': p.get('source_url') or p.get('player_name_url') or None
+        })
+    
+    # Deduplicate
+    deduped_players = dedupe_pti_players(processed_players)
+    
+    # Clear existing roster and insert new data
+    await db.pti_roster.delete_many({})
+    
+    # Insert deduped players
+    now = datetime.now(timezone.utc).isoformat()
+    roster_docs = []
+    for p in deduped_players:
+        doc = {
+            "id": str(uuid.uuid4()),
+            "player_name": p['player_name'],
+            "pti_value": p['pti_value'],
+            "source_url": p.get('source_url'),
+            "scraped_at": now
+        }
+        roster_docs.append(doc)
+    
+    if roster_docs:
+        await db.pti_roster.insert_many(roster_docs)
+    
+    return {
+        "message": "PTI roster imported successfully",
+        "total_received": len(data.players),
+        "total_after_dedup": len(roster_docs),
+        "duplicates_removed": len(data.players) - len(roster_docs)
+    }
+
+@api_router.post("/admin/pti-roster/scrape")
+async def scrape_pti_roster(data: PTIScrapeRequest, current_player: dict = Depends(get_current_player)):
+    """Scrape PTI roster data from paddlescores.com using Firecrawl agent"""
+    if not FIRECRAWL_API_KEY:
+        raise HTTPException(status_code=500, detail="Firecrawl API key not configured")
+    
+    if not data.urls:
+        raise HTTPException(status_code=400, detail="No URLs provided")
+    
+    try:
+        # Initialize Firecrawl
+        app = FirecrawlApp(api_key=FIRECRAWL_API_KEY)
+        
+        # Build the prompt for extracting player data
+        urls_list = "\n".join([f"- {url}" for url in data.urls])
+        default_prompt = f"""Extract player names and their associated PTI values (from the 'R' column) from the table with class 'team_roster_table' from the provided Cape Ann Paddle Team URLs. For each player, also extract the 'href' attribute from the link within their name cell that has the class 'lightbox-auto'. Do not include captain designations.
+
+Target URLs:
+{urls_list}"""
+        
+        prompt = data.prompt if data.prompt else default_prompt
+        
+        # Define the schema for extraction
+        class ExtractSchema(BaseModel):
+            cape_ann_paddle_team_roster: List[dict]
+        
+        # Run the Firecrawl agent
+        result = app.agent(
+            schema=ExtractSchema,
+            prompt=prompt,
+        )
+        
+        # Process the result
+        if not result or not hasattr(result, 'cape_ann_paddle_team_roster'):
+            # Try to extract from dict if result is dict-like
+            roster_data = []
+            if isinstance(result, dict):
+                roster_data = result.get('cape_ann_paddle_team_roster', [])
+            elif hasattr(result, '__dict__'):
+                roster_data = getattr(result, 'cape_ann_paddle_team_roster', [])
+        else:
+            roster_data = result.cape_ann_paddle_team_roster
+        
+        if not roster_data:
+            return {
+                "message": "Scrape completed but no player data found",
+                "raw_result": str(result)[:500]  # Include truncated raw result for debugging
+            }
+        
+        # Process and deduplicate the scraped data
+        processed_players = []
+        for p in roster_data:
+            player_name = p.get('player_name', '').strip()
+            pti_value = p.get('pti_value')
+            
+            if not player_name:
+                continue
+            
+            if pti_value is not None:
+                try:
+                    pti_value = float(pti_value)
+                except (ValueError, TypeError):
+                    pti_value = None
+            
+            processed_players.append({
+                'player_name': player_name,
+                'pti_value': pti_value,
+                'source_url': p.get('player_name_url') or p.get('href') or None
+            })
+        
+        # Deduplicate
+        deduped_players = dedupe_pti_players(processed_players)
+        
+        # Clear existing roster and insert new data
+        await db.pti_roster.delete_many({})
+        
+        now = datetime.now(timezone.utc).isoformat()
+        roster_docs = []
+        for p in deduped_players:
+            doc = {
+                "id": str(uuid.uuid4()),
+                "player_name": p['player_name'],
+                "pti_value": p['pti_value'],
+                "source_url": p.get('source_url'),
+                "scraped_at": now
+            }
+            roster_docs.append(doc)
+        
+        if roster_docs:
+            await db.pti_roster.insert_many(roster_docs)
+        
+        return {
+            "message": "PTI roster scraped and imported successfully",
+            "total_scraped": len(roster_data),
+            "total_after_dedup": len(roster_docs),
+            "duplicates_removed": len(roster_data) - len(roster_docs)
+        }
+        
+    except Exception as e:
+        logger.error(f"Firecrawl scraping error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Scraping failed: {str(e)}")
+
+@api_router.post("/admin/pti-roster/sync-players")
+async def sync_pti_to_players(current_player: dict = Depends(get_current_player)):
+    """Sync PTI values from roster to registered players by matching names"""
+    # Get all PTI roster entries
+    roster = await db.pti_roster.find({}, {"_id": 0}).to_list(1000)
+    if not roster:
+        return {"message": "No PTI roster data available", "updated": 0}
+    
+    # Create a lookup dict with normalized names
+    pti_lookup = {}
+    for entry in roster:
+        name = normalize_name(entry.get('player_name', ''))
+        if name and entry.get('pti_value') is not None:
+            pti_lookup[name] = entry['pti_value']
+    
+    # Get all registered players
+    players = await db.players.find({"profile_complete": True}, {"_id": 0}).to_list(1000)
+    
+    updated_count = 0
+    update_log = []
+    
+    for player in players:
+        player_name = normalize_name(player.get('name', ''))
+        if player_name in pti_lookup:
+            new_pti = pti_lookup[player_name]
+            old_pti = player.get('pti')
+            
+            # Convert PTI to int (as per existing schema)
+            new_pti_int = int(round(new_pti))
+            
+            if old_pti != new_pti_int:
+                await db.players.update_one(
+                    {"id": player['id']},
+                    {"$set": {
+                        "pti": new_pti_int,
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    }}
+                )
+                updated_count += 1
+                update_log.append({
+                    "player_name": player.get('name'),
+                    "old_pti": old_pti,
+                    "new_pti": new_pti_int
+                })
+    
+    return {
+        "message": f"Synced PTI values to {updated_count} players",
+        "total_roster_entries": len(roster),
+        "total_registered_players": len(players),
+        "updated": updated_count,
+        "updates": update_log
+    }
+
+@api_router.delete("/admin/pti-roster")
+async def clear_pti_roster(current_player: dict = Depends(get_current_player)):
+    """Clear all PTI roster data"""
+    result = await db.pti_roster.delete_many({})
+    return {"message": "PTI roster cleared", "deleted": result.deleted_count}
+
 # ==================== UTILITY ROUTES ====================
 
 @api_router.get("/clubs/suggestions")
