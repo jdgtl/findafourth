@@ -93,4 +93,10 @@ export const utilityAPI = {
   getClubSuggestions: () => api.get('/clubs/suggestions'),
 };
 
+// PTI APIs
+export const ptiAPI = {
+  lookup: (name) => api.get('/pti/lookup', { params: { name } }),
+  getRosterList: () => api.get('/pti/roster-list'),
+};
+
 export default api;
