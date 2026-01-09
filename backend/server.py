@@ -214,6 +214,21 @@ class AvailabilityPost(BaseModel):
     expires_at: datetime
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+# PTI Roster Models (for scraped data)
+class PTIPlayerEntry(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    player_name: str
+    pti_value: float
+    source_url: Optional[str] = None
+    scraped_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class PTIImportRequest(BaseModel):
+    players: List[dict]  # List of {player_name, pti_value, source_url?}
+
+class PTIScrapeRequest(BaseModel):
+    urls: List[str]
+    prompt: Optional[str] = None
+
 # ==================== HELPER FUNCTIONS ====================
 
 def hash_password(password: str) -> str:
