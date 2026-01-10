@@ -71,6 +71,7 @@ class PlayerProfile(BaseModel):
     home_club: str
     other_clubs: List[str] = []
     pti: Optional[int] = None
+    pti_verified: Optional[bool] = False
     phone: Optional[str] = None
 
 class PlayerUpdate(BaseModel):
