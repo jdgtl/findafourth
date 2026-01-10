@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_NA4 }}
 
 jobs:
   analyze:
@@ -203,7 +203,7 @@ jobs:
             --skip-e2e \
             --output test-agent-report.md
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_NA4 }}
         continue-on-error: true
 
       - name: Upload agent report
