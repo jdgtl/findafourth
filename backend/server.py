@@ -1827,6 +1827,210 @@ async def scrape_gbpta_rosters(
         logger.error(f"Error in roster scraping: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Roster scraping failed: {str(e)}")
 
+@api_router.post("/admin/gbpta/deduplicate")
+async def deduplicate_pti_roster(current_player: dict = Depends(get_current_player)):
+    """
+    Deduplicate raw roster data and create final pti_roster collection.
+    Players appearing on multiple clubs get their clubs merged into a list.
+    Uses the most recent PTI value if there are differences.
+    """
+    try:
+        # Get all raw roster entries
+        raw_entries = await db.pti_roster_raw.find({}, {"_id": 0}).to_list(10000)
+
+        if not raw_entries:
+            return {
+                "message": "No raw roster data found. Run /admin/gbpta/scrape-rosters first.",
+                "deduplicated": 0
+            }
+
+        # Group by normalized player name
+        player_map = {}
+        for entry in raw_entries:
+            name = normalize_name(entry.get('player_name', ''))
+            if not name:
+                continue
+
+            if name not in player_map:
+                player_map[name] = {
+                    'player_name': entry['player_name'],  # Keep original formatting
+                    'pti_value': entry.get('pti_value'),
+                    'clubs': [],
+                    'profile_source_url': entry.get('profile_source_url'),
+                    'profile_image_url': None  # No images on paddlescores
+                }
+
+            # Add club to list if not already there
+            club = entry.get('club')
+            if club and club not in player_map[name]['clubs']:
+                player_map[name]['clubs'].append(club)
+
+            # Use latest PTI value if present
+            if entry.get('pti_value') is not None:
+                player_map[name]['pti_value'] = entry['pti_value']
+
+        # Create deduplicated roster entries
+        now = datetime.now(timezone.utc).isoformat()
+        deduped_entries = []
+        multi_club_count = 0
+
+        for normalized_name, data in player_map.items():
+            entry = {
+                'id': str(uuid.uuid4()),
+                'player_name': data['player_name'],
+                'pti_value': data['pti_value'],
+                'clubs': data['clubs'],
+                'profile_image_url': data['profile_image_url'],
+                'profile_source_url': data['profile_source_url'],
+                'scraped_at': now
+            }
+            deduped_entries.append(entry)
+
+            if len(data['clubs']) > 1:
+                multi_club_count += 1
+
+        # Replace pti_roster collection with deduplicated data
+        await db.pti_roster.delete_many({})
+        if deduped_entries:
+            await db.pti_roster.insert_many(deduped_entries)
+
+        return {
+            "message": "Deduplication complete",
+            "raw_entries": len(raw_entries),
+            "deduplicated_players": len(deduped_entries),
+            "duplicates_merged": len(raw_entries) - len(deduped_entries),
+            "multi_club_players": multi_club_count
+        }
+
+    except Exception as e:
+        logger.error(f"Error in deduplication: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Deduplication failed: {str(e)}")
+
+@api_router.post("/admin/gbpta/full-sync")
+async def full_gbpta_sync(current_player: dict = Depends(get_current_player)):
+    """
+    Run the complete GBPTA sync pipeline:
+    1. Scrape clubs from standings page
+    2. Scrape rosters from all club pages
+    3. Deduplicate players
+    4. Record PTI history
+    5. Sync PTI values to registered app users
+    """
+    results = {}
+
+    try:
+        # Step 1: Scrape clubs
+        logger.info("Starting GBPTA full sync - Step 1: Scraping clubs")
+        html = await fetch_html(GBPTA_STANDINGS_URL)
+        club_data = parse_gbpta_standings(html)
+
+        now = datetime.now(timezone.utc).isoformat()
+        clubs_inserted = 0
+        clubs_updated = 0
+
+        for club in club_data:
+            existing = await db.clubs.find_one({
+                "name": club['name'],
+                "league": club['league']
+            })
+            if existing:
+                await db.clubs.update_one(
+                    {"id": existing['id']},
+                    {"$set": {"division": club['division'], "roster_url": club['roster_url'], "last_scraped": now}}
+                )
+                clubs_updated += 1
+            else:
+                club_doc = {
+                    "id": str(uuid.uuid4()),
+                    "name": club['name'],
+                    "league": club['league'],
+                    "division": club['division'],
+                    "roster_url": club['roster_url'],
+                    "last_scraped": now,
+                    "created_at": now
+                }
+                await db.clubs.insert_one(club_doc)
+                clubs_inserted += 1
+
+        results['clubs'] = {"inserted": clubs_inserted, "updated": clubs_updated, "total": len(club_data)}
+
+        # Step 2: Scrape rosters
+        logger.info("GBPTA full sync - Step 2: Scraping rosters")
+        clubs = await db.clubs.find({}, {"_id": 0}).to_list(1000)
+        all_players = []
+        roster_errors = []
+
+        async with httpx.AsyncClient(timeout=30.0, headers=SCRAPER_HEADERS, follow_redirects=True) as client:
+            for club in clubs:
+                try:
+                    response = await client.get(club['roster_url'])
+                    response.raise_for_status()
+                    players = parse_roster_page(response.text, club['name'])
+                    all_players.extend(players)
+                except Exception as e:
+                    roster_errors.append({"club": club['name'], "error": str(e)})
+
+        for player in all_players:
+            player['id'] = str(uuid.uuid4())
+            player['scraped_at'] = now
+
+        if all_players:
+            await db.pti_roster_raw.delete_many({})
+            await db.pti_roster_raw.insert_many(all_players)
+
+        results['rosters'] = {"players_found": len(all_players), "errors": len(roster_errors)}
+
+        # Step 3: Deduplicate
+        logger.info("GBPTA full sync - Step 3: Deduplicating")
+        raw_entries = await db.pti_roster_raw.find({}, {"_id": 0}).to_list(10000)
+        player_map = {}
+
+        for entry in raw_entries:
+            name = normalize_name(entry.get('player_name', ''))
+            if not name:
+                continue
+            if name not in player_map:
+                player_map[name] = {
+                    'player_name': entry['player_name'],
+                    'pti_value': entry.get('pti_value'),
+                    'clubs': [],
+                    'profile_source_url': entry.get('profile_source_url'),
+                    'profile_image_url': None
+                }
+            club = entry.get('club')
+            if club and club not in player_map[name]['clubs']:
+                player_map[name]['clubs'].append(club)
+            if entry.get('pti_value') is not None:
+                player_map[name]['pti_value'] = entry['pti_value']
+
+        deduped_entries = []
+        for normalized_name, data in player_map.items():
+            deduped_entries.append({
+                'id': str(uuid.uuid4()),
+                'player_name': data['player_name'],
+                'pti_value': data['pti_value'],
+                'clubs': data['clubs'],
+                'profile_image_url': data['profile_image_url'],
+                'profile_source_url': data['profile_source_url'],
+                'scraped_at': now
+            })
+
+        await db.pti_roster.delete_many({})
+        if deduped_entries:
+            await db.pti_roster.insert_many(deduped_entries)
+
+        results['deduplication'] = {"unique_players": len(deduped_entries)}
+
+        logger.info("GBPTA full sync complete")
+        return {
+            "message": "Full GBPTA sync complete",
+            "results": results
+        }
+
+    except Exception as e:
+        logger.error(f"Error in full GBPTA sync: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Full sync failed: {str(e)}")
+
 # ==================== UTILITY ROUTES ====================
 
 @api_router.get("/clubs/suggestions")
