@@ -376,6 +376,7 @@ async def complete_profile(profile: PlayerProfile, current_player: dict = Depend
         "home_club": profile.home_club,
         "other_clubs": profile.other_clubs,
         "pti": profile.pti,
+        "pti_verified": profile.pti_verified or False,
         "phone": profile.phone,
         "profile_complete": True,
         "updated_at": datetime.now(timezone.utc).isoformat()
