@@ -2092,6 +2092,113 @@ async def record_pti_history(current_player: dict = Depends(get_current_player))
 
 # ==================== UTILITY ROUTES ====================
 
+@api_router.get("/clubs")
+async def list_clubs(
+    league: Optional[str] = None,
+    current_player: dict = Depends(get_current_player)
+):
+    """
+    List all clubs from GBPTA scraping.
+    Optionally filter by league (Metrowest, North Shore, Metrowest Women's Day League).
+    Returns clubs with member counts.
+    """
+    query = {}
+    if league:
+        query["league"] = league
+
+    clubs = await db.clubs.find(query, {"_id": 0}).to_list(1000)
+
+    # Add member counts from pti_roster
+    for club in clubs:
+        # Count players who have this club in their clubs array
+        member_count = await db.pti_roster.count_documents({"clubs": club['name']})
+        club['member_count'] = member_count
+
+        # Count registered app users with this as home_club
+        registered_count = await db.players.count_documents({
+            "profile_complete": True,
+            "$or": [
+                {"home_club": club['name']},
+                {"other_clubs": club['name']}
+            ]
+        })
+        club['registered_count'] = registered_count
+
+    return {
+        "clubs": clubs,
+        "total": len(clubs)
+    }
+
+@api_router.get("/clubs/{club_id}")
+async def get_club(club_id: str, current_player: dict = Depends(get_current_player)):
+    """
+    Get club details with full roster.
+    Returns both scraped players and registered app users.
+    """
+    # Find club by ID or name
+    club = await db.clubs.find_one(
+        {"$or": [{"id": club_id}, {"name": club_id}]},
+        {"_id": 0}
+    )
+
+    if not club:
+        raise HTTPException(status_code=404, detail="Club not found")
+
+    # Get all players from pti_roster who belong to this club
+    roster_players = await db.pti_roster.find(
+        {"clubs": club['name']},
+        {"_id": 0}
+    ).to_list(1000)
+
+    # Get registered app users for this club
+    registered_users = await db.players.find(
+        {
+            "profile_complete": True,
+            "$or": [
+                {"home_club": club['name']},
+                {"other_clubs": club['name']}
+            ]
+        },
+        {"_id": 0, "password_hash": 0}
+    ).to_list(1000)
+
+    # Create a lookup of registered users by normalized name
+    registered_lookup = {}
+    for user in registered_users:
+        normalized = normalize_name(user.get('name', ''))
+        if normalized:
+            registered_lookup[normalized] = user
+
+    # Build combined roster
+    combined_roster = []
+    for player in roster_players:
+        normalized = normalize_name(player['player_name'])
+        is_registered = normalized in registered_lookup
+
+        roster_entry = {
+            'player_name': player['player_name'],
+            'pti_value': player.get('pti_value'),
+            'profile_image_url': player.get('profile_image_url'),
+            'is_registered': is_registered,
+            'player_id': registered_lookup[normalized]['id'] if is_registered else None
+        }
+
+        # If registered, use their app profile image if they have one
+        if is_registered and registered_lookup[normalized].get('profile_image_url'):
+            roster_entry['profile_image_url'] = registered_lookup[normalized]['profile_image_url']
+
+        combined_roster.append(roster_entry)
+
+    # Sort by PTI (lower is better, None values at end)
+    combined_roster.sort(key=lambda x: (x['pti_value'] is None, x['pti_value'] or 999))
+
+    return {
+        "club": club,
+        "roster": combined_roster,
+        "total_members": len(combined_roster),
+        "registered_count": len(registered_users)
+    }
+
 @api_router.get("/clubs/suggestions")
 async def get_club_suggestions(current_player: dict = Depends(get_current_player)):
     """Get common clubs for autocomplete"""

@@ -88,15 +88,23 @@ export const availabilityAPI = {
   delete: (id) => api.delete(`/availability/${id}`),
 };
 
-// Utility APIs
-export const utilityAPI = {
-  getClubSuggestions: () => api.get('/clubs/suggestions'),
+// Club APIs
+export const clubAPI = {
+  list: (params) => api.get('/clubs', { params }),
+  get: (id) => api.get(`/clubs/${id}`),
+  getSuggestions: () => api.get('/clubs/suggestions'),
 };
 
 // PTI APIs
 export const ptiAPI = {
   lookup: (name) => api.get('/pti/lookup', { params: { name } }),
   getRosterList: () => api.get('/pti/roster-list'),
+  getHistory: (playerName) => api.get('/pti/history', { params: { player_name: playerName } }),
+};
+
+// Utility APIs (deprecated - use clubAPI.getSuggestions instead)
+export const utilityAPI = {
+  getClubSuggestions: () => api.get('/clubs/suggestions'),
 };
 
 export default api;
