@@ -60,11 +60,12 @@ jobs:
           fi
 
           # Test infrastructure changes trigger E2E
-          if echo "$CHANGED" | grep -qE "e2e/|playwright|\.spec\.|\.test\."; then
+          if echo "$CHANGED" | grep -qE "e2e/|playwright|\.spec\."; then
             RUN_E2E="true"
           fi
 
-          if echo "$CHANGED" | grep -qE "lib/|utils"; then
+          # Unit test changes trigger unit tests
+          if echo "$CHANGED" | grep -qE "lib/|utils|__tests__|\.test\.|setupTests"; then
             RUN_UNIT="true"
           fi
 
@@ -284,7 +285,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: playwright-report-shard-*
-          path: all-reports
+          path: frontend/all-reports
 
       - name: Merge reports
         run: |
