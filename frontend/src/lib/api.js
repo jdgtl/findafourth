@@ -47,6 +47,14 @@ export const playerAPI = {
   get: (id) => api.get(`/players/${id}`),
   update: (id, data) => api.put(`/players/${id}`, data),
   delete: (id) => api.delete(`/players/${id}`),
+  uploadProfileImage: (id, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post(`/players/${id}/profile-image`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  deleteProfileImage: (id) => api.delete(`/players/${id}/profile-image`),
 };
 
 // Request APIs

@@ -1,7 +1,9 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+import shutil
 from motor.motor_asyncio import AsyncIOMotorClient
 from contextlib import asynccontextmanager
 import os
@@ -246,6 +248,15 @@ async def lifespan(app: FastAPI):
 # Create the main app with lifespan
 app = FastAPI(title="NeedaFourth API", lifespan=lifespan)
 
+# Uploads configuration
+UPLOADS_DIR = ROOT_DIR / "uploads"
+UPLOADS_DIR.mkdir(exist_ok=True)
+PROFILE_IMAGES_DIR = UPLOADS_DIR / "profile_images"
+PROFILE_IMAGES_DIR.mkdir(exist_ok=True)
+
+# Mount static files for uploads
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
+
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
@@ -366,6 +377,7 @@ class RequestCreate(BaseModel):
     mode: str = "quick_fill"  # quick_fill, organizer_picks
     audience: str = "crews"  # crews, club, regional
     target_crew_ids: List[str] = []
+    target_club_names: List[str] = []  # Club names for 'club' audience
     notes: Optional[str] = None
 
 class RequestUpdate(BaseModel):
@@ -374,6 +386,7 @@ class RequestUpdate(BaseModel):
     skill_max: Optional[int] = None
     audience: Optional[str] = None
     target_crew_ids: Optional[List[str]] = None
+    target_club_names: Optional[List[str]] = None
     notes: Optional[str] = None
     status: Optional[str] = None
 
@@ -676,6 +689,82 @@ async def update_player(player_id: str, data: PlayerUpdate, current_player: dict
     
     updated_player = await db.players.find_one({"id": player_id}, {"_id": 0, "password_hash": 0})
     return updated_player
+
+@api_router.post("/players/{player_id}/profile-image")
+async def upload_profile_image(
+    player_id: str,
+    file: UploadFile = File(...),
+    current_player: dict = Depends(get_current_player)
+):
+    """Upload a profile image for the current player"""
+    if player_id != current_player['id']:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Validate file type
+    allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed types: {', '.join(allowed_types)}"
+        )
+
+    # Validate file size (max 5MB)
+    max_size = 5 * 1024 * 1024  # 5MB
+    contents = await file.read()
+    if len(contents) > max_size:
+        raise HTTPException(status_code=400, detail="File too large. Maximum size is 5MB")
+
+    # Generate unique filename
+    file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
+    filename = f"{player_id}_{uuid.uuid4().hex[:8]}.{file_ext}"
+    file_path = PROFILE_IMAGES_DIR / filename
+
+    # Delete old profile image if exists
+    existing_player = await db.players.find_one({"id": player_id}, {"_id": 0})
+    if existing_player and existing_player.get('profile_image_url'):
+        old_url = existing_player['profile_image_url']
+        # Only delete if it's a local upload (starts with /uploads/)
+        if old_url.startswith('/uploads/'):
+            old_path = ROOT_DIR / old_url.lstrip('/')
+            if old_path.exists():
+                old_path.unlink()
+
+    # Save file
+    with open(file_path, 'wb') as f:
+        f.write(contents)
+
+    # Update player with new image URL
+    image_url = f"/uploads/profile_images/{filename}"
+    await db.players.update_one(
+        {"id": player_id},
+        {"$set": {"profile_image_url": image_url, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+
+    updated_player = await db.players.find_one({"id": player_id}, {"_id": 0, "password_hash": 0})
+    return {"profile_image_url": image_url, "player": updated_player}
+
+@api_router.delete("/players/{player_id}/profile-image")
+async def delete_profile_image(player_id: str, current_player: dict = Depends(get_current_player)):
+    """Delete the player's profile image"""
+    if player_id != current_player['id']:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    existing_player = await db.players.find_one({"id": player_id}, {"_id": 0})
+    if existing_player and existing_player.get('profile_image_url'):
+        old_url = existing_player['profile_image_url']
+        # Only delete if it's a local upload
+        if old_url.startswith('/uploads/'):
+            old_path = ROOT_DIR / old_url.lstrip('/')
+            if old_path.exists():
+                old_path.unlink()
+
+    await db.players.update_one(
+        {"id": player_id},
+        {"$set": {"profile_image_url": None, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+
+    updated_player = await db.players.find_one({"id": player_id}, {"_id": 0, "password_hash": 0})
+    return {"message": "Profile image deleted", "player": updated_player}
 
 @api_router.delete("/players/{player_id}")
 async def delete_player(player_id: str, current_player: dict = Depends(get_current_player)):
@@ -1041,6 +1130,7 @@ async def create_request(data: RequestCreate, current_player: dict = Depends(get
         "mode": data.mode,
         "audience": data.audience,
         "target_crew_ids": data.target_crew_ids,
+        "target_club_names": data.target_club_names,
         "status": "open",
         "notes": data.notes,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -1074,11 +1164,16 @@ async def notify_request_audience(request: dict, organizer: dict):
             player_ids_to_notify.add(f['favorite_player_id'])
     
     elif request['audience'] == 'club':
-        # Get players at the same club
+        # Get players at the target clubs
+        target_clubs = request.get('target_club_names', [])
+        # Fallback to request's club if no target clubs specified
+        if not target_clubs:
+            target_clubs = [request['club']]
+
         players = await db.players.find({
             "$or": [
-                {"home_club": request['club']},
-                {"other_clubs": request['club']}
+                {"home_club": {"$in": target_clubs}},
+                {"other_clubs": {"$in": target_clubs}}
             ],
             "profile_complete": True
         }).to_list(1000)

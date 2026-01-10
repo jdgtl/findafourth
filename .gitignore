@@ -52,6 +52,9 @@ __pycache__/
 venv/
 .venv/
 
+# Uploaded files
+backend/uploads/
+
 # Development tools
 chainlit.md
 .chainlit
@@ -77,22 +80,10 @@ agenthub/agents/youtube/db
 .cache/
 
 # Mobile development
-android-sdk/ frontend/node_modules/.cache/default-development/3.pack
-frontend/node_modules/.cache/default-development/3.pack
-frontend/node_modules/.cache/default-development/0.pack
--e 
+android-sdk/
+
 # Environment files
 *.env
 *.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
+.env.example
+!.env.example

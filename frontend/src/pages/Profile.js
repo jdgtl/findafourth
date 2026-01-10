@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { playerAPI } from '@/lib/api';
+import { getProfileImageUrl } from '@/lib/utils';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,15 +24,18 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Loader2, X, LogOut, Trash2, User, Bell, Eye, Shield } from 'lucide-react';
+import { Loader2, X, LogOut, Trash2, User, Bell, Eye, Shield, Camera } from 'lucide-react';
+import PTIHistoryChart from '@/components/PTIHistoryChart';
 
 const Profile = () => {
   const navigate = useNavigate();
   const { player, logout, updatePlayer } = useAuth();
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const fileInputRef = useRef(null);
 
   // Form state
   const [name, setName] = useState(player?.name || '');
@@ -103,6 +108,64 @@ const Profile = () => {
     }
   };
 
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file');
+      return;
+    }
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image must be less than 5MB');
+      return;
+    }
+
+    setUploadingImage(true);
+    setError('');
+
+    try {
+      const response = await playerAPI.uploadProfileImage(player.id, file);
+      updatePlayer(response.data.player);
+      setSuccess('Profile image updated!');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveImage = async () => {
+    setUploadingImage(true);
+    setError('');
+
+    try {
+      const response = await playerAPI.deleteProfileImage(player.id);
+      updatePlayer(response.data.player);
+      setSuccess('Profile image removed');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to remove image');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const getInitials = (name) => {
+    if (!name) return '?';
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
   return (
     <AppLayout>
       <div className="max-w-lg mx-auto space-y-6" data-testid="profile-page">
@@ -135,6 +198,53 @@ const Profile = () => {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Profile Image */}
+            <div className="flex flex-col items-center gap-3 pb-4 border-b">
+              <div className="relative">
+                <Avatar className="w-24 h-24">
+                  <AvatarImage src={getProfileImageUrl(player?.profile_image_url)} />
+                  <AvatarFallback className="text-2xl bg-emerald-100 text-emerald-700">
+                    {getInitials(player?.name)}
+                  </AvatarFallback>
+                </Avatar>
+                {uploadingImage && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
+                    <Loader2 className="w-6 h-6 animate-spin text-white" />
+                  </div>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
+                id="profile-image-upload"
+              />
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingImage}
+                >
+                  <Camera className="w-4 h-4 mr-1" />
+                  {player?.profile_image_url ? 'Change Photo' : 'Add Photo'}
+                </Button>
+                {player?.profile_image_url && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemoveImage}
+                    disabled={uploadingImage}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input id="email" value={player?.email || ''} disabled />
@@ -274,6 +384,11 @@ const Profile = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* PTI History Chart - only show for verified PTI users */}
+        {player?.pti_verified && player?.name && (
+          <PTIHistoryChart playerName={player.name} currentPti={player.pti} />
+        )}
 
         {/* Notification Preferences */}
         <Card>

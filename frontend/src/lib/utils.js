@@ -8,6 +8,9 @@ export function cn(...inputs) {
 // Default placeholder image for players without profile photos
 export const DEFAULT_PROFILE_IMAGE = "/images/default-avatar.svg";
 
+// Backend URL for constructing full image paths
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+
 /**
  * Returns the profile image URL or a default placeholder
  * @param {string|null|undefined} imageUrl - The profile image URL
@@ -17,5 +20,11 @@ export function getProfileImageUrl(imageUrl) {
   if (!imageUrl || imageUrl.trim() === "") {
     return DEFAULT_PROFILE_IMAGE;
   }
+
+  // If it's a relative path for uploaded files, prepend backend URL
+  if (imageUrl.startsWith('/uploads/')) {
+    return `${BACKEND_URL}${imageUrl}`;
+  }
+
   return imageUrl;
 }

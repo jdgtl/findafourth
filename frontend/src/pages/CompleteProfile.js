@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, X, Info, Check, Search, ChevronDown, Shield } from 'lucide-react';
+import { Loader2, X, Info, Check, Search, ChevronDown, Shield, Building2 } from 'lucide-react';
 
 // Animated text component for PTI lookup steps
 const AnimatedStep = ({ text, isActive, isExiting }) => {
@@ -146,6 +146,17 @@ const CompleteProfile = () => {
     if (ptiMatch) {
       setPti(Math.round(ptiMatch.pti_value).toString());
       setPtiVerified(true);
+
+      // Auto-populate clubs from the match
+      const matchedClubs = ptiMatch.clubs || [];
+      if (matchedClubs.length > 0) {
+        // Set first club as home club, rest as other clubs
+        setHomeClub(matchedClubs[0]);
+        if (matchedClubs.length > 1) {
+          setOtherClubs(matchedClubs.slice(1));
+        }
+      }
+
       setPtiLookupState('idle');
     }
   };
@@ -159,6 +170,16 @@ const CompleteProfile = () => {
     setName(player.player_name);
     setPti(Math.round(player.pti_value).toString());
     setPtiVerified(true);
+
+    // Auto-populate clubs from the selected player
+    const matchedClubs = player.clubs || [];
+    if (matchedClubs.length > 0) {
+      setHomeClub(matchedClubs[0]);
+      if (matchedClubs.length > 1) {
+        setOtherClubs(matchedClubs.slice(1));
+      }
+    }
+
     setPtiLookupState('idle');
     setShowDropdown(false);
     setDropdownSearch('');
@@ -243,6 +264,7 @@ const CompleteProfile = () => {
     }
 
     if (ptiLookupState === 'found' && ptiMatch) {
+      const matchedClubs = ptiMatch.clubs || [];
       return (
         <div className="mt-4 p-6 bg-gradient-to-br from-emerald-50 to-green-50 rounded-xl border border-emerald-200 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
           <div className="flex items-center gap-2 mb-4">
@@ -251,7 +273,7 @@ const CompleteProfile = () => {
             </div>
             <span className="text-emerald-700 font-semibold">We found your APTA rating!</span>
           </div>
-          
+
           <div className="bg-white rounded-lg p-4 border border-emerald-200 mb-4">
             <div className="flex items-center justify-between">
               <div>
@@ -263,10 +285,32 @@ const CompleteProfile = () => {
                 <p className="text-xs text-gray-500 uppercase tracking-wide">PTI</p>
               </div>
             </div>
+            {matchedClubs.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+                  <Building2 className="w-4 h-4" />
+                  <span>{matchedClubs.length === 1 ? 'Club' : 'Clubs'}</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {matchedClubs.map((club, idx) => (
+                    <Badge
+                      key={club}
+                      variant="secondary"
+                      className={idx === 0 ? 'bg-emerald-100 text-emerald-700' : ''}
+                    >
+                      {club}
+                      {idx === 0 && matchedClubs.length > 1 && (
+                        <span className="ml-1 text-xs opacity-75">(home)</span>
+                      )}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-          
+
           <div className="flex gap-3">
-            <Button 
+            <Button
               onClick={handleConfirmMatch}
               className="flex-1 bg-emerald-600 hover:bg-emerald-700"
               data-testid="confirm-pti-match-btn"
@@ -274,7 +318,7 @@ const CompleteProfile = () => {
               <Check className="w-4 h-4 mr-2" />
               Yes, that&apos;s me
             </Button>
-            <Button 
+            <Button
               onClick={handleRejectMatch}
               variant="outline"
               className="flex-1"
@@ -333,12 +377,19 @@ const CompleteProfile = () => {
                     filteredRoster.map((p, idx) => (
                       <div
                         key={idx}
-                        className="px-4 py-3 hover:bg-emerald-50 cursor-pointer flex items-center justify-between border-b border-gray-50 last:border-0"
+                        className="px-4 py-3 hover:bg-emerald-50 cursor-pointer border-b border-gray-50 last:border-0"
                         onClick={() => handleSelectFromDropdown(p)}
                         data-testid={`pti-roster-item-${idx}`}
                       >
-                        <span className="font-medium text-gray-900">{p.player_name}</span>
-                        <span className="text-emerald-600 font-semibold">{p.pti_value}</span>
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-gray-900">{p.player_name}</span>
+                          <span className="text-emerald-600 font-semibold">{p.pti_value}</span>
+                        </div>
+                        {p.clubs && p.clubs.length > 0 && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {p.clubs.join(', ')}
+                          </div>
+                        )}
                       </div>
                     ))
                   )}

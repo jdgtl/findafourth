@@ -34,6 +34,7 @@ const CreateRequest = () => {
   const [skillRange, setSkillRange] = useState([20, 60]);
   const [audience, setAudience] = useState('crews');
   const [selectedCrews, setSelectedCrews] = useState([]);
+  const [selectedClubs, setSelectedClubs] = useState([]);
   const [includeFavorites, setIncludeFavorites] = useState(true);
   const [mode, setMode] = useState('quick_fill');
   const [notes, setNotes] = useState('');
@@ -60,9 +61,21 @@ const CreateRequest = () => {
     return hour;
   };
 
+  // Get player's clubs (home + other)
+  const playerClubs = React.useMemo(() => {
+    const clubs = [];
+    if (player?.home_club) clubs.push(player.home_club);
+    if (player?.other_clubs) clubs.push(...player.other_clubs);
+    return [...new Set(clubs)]; // Remove duplicates
+  }, [player]);
+
   useEffect(() => {
     loadData();
-  }, []);
+    // Initialize selected clubs with all player clubs
+    if (playerClubs.length > 0) {
+      setSelectedClubs(playerClubs);
+    }
+  }, [playerClubs]);
 
   const loadData = async () => {
     try {
@@ -78,6 +91,12 @@ const CreateRequest = () => {
   const handleCrewToggle = (crewId) => {
     setSelectedCrews((prev) =>
       prev.includes(crewId) ? prev.filter((id) => id !== crewId) : [...prev, crewId]
+    );
+  };
+
+  const handleClubToggle = (clubName) => {
+    setSelectedClubs((prev) =>
+      prev.includes(clubName) ? prev.filter((c) => c !== clubName) : [...prev, clubName]
     );
   };
 
@@ -114,6 +133,7 @@ const CreateRequest = () => {
         mode,
         audience,
         target_crew_ids: audience === 'crews' ? selectedCrews : [],
+        target_club_names: audience === 'club' ? selectedClubs : [],
         notes: notes.trim() || null,
       };
 
@@ -504,26 +524,56 @@ const CreateRequest = () => {
                 </div>
 
                 {/* My Club Option */}
-                <div 
+                <div
                   className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                    audience === 'club' 
-                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' 
+                    audience === 'club'
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
                       : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
                   }`}
                   onClick={() => setAudience('club')}
                 >
                   <div className="flex items-center gap-3">
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                      audience === 'club' 
-                        ? 'border-emerald-500 bg-emerald-500' 
+                      audience === 'club'
+                        ? 'border-emerald-500 bg-emerald-500'
                         : 'border-gray-300'
                     }`}>
                       {audience === 'club' && (
                         <div className="w-2 h-2 rounded-full bg-white" />
                       )}
                     </div>
-                    <span className="font-medium">My Club</span>
+                    <span className="font-medium">My Clubs</span>
                   </div>
+
+                  {/* Club selection checkboxes */}
+                  {audience === 'club' && playerClubs.length > 0 && (
+                    <div className="mt-4 ml-8 space-y-3">
+                      {playerClubs.map((clubName) => (
+                        <label
+                          key={clubName}
+                          className="flex items-center gap-3 cursor-pointer"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Checkbox
+                            checked={selectedClubs.includes(clubName)}
+                            onCheckedChange={() => handleClubToggle(clubName)}
+                            className="data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
+                          />
+                          <span className="text-sm">
+                            {clubName}
+                            {clubName === player?.home_club && (
+                              <span className="text-xs text-gray-500 ml-1">(Home)</span>
+                            )}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {audience === 'club' && playerClubs.length === 0 && (
+                    <p className="mt-4 ml-8 text-sm text-gray-500">
+                      No clubs on your profile. Add clubs in your profile settings.
+                    </p>
+                  )}
                 </div>
 
                 {/* Open Option */}
