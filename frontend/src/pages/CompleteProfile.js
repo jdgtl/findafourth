@@ -58,7 +58,7 @@ const CompleteProfile = () => {
   const [dropdownSearch, setDropdownSearch] = useState('');
 
   const searchSteps = [
-    'Connecting to PTI Database...',
+    'Connecting to APTA Database...',
     `Searching for ${name || 'player'}...`,
     `Match found for ${name || 'player'}!`,
   ];
