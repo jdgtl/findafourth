@@ -190,17 +190,35 @@ const Profile = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="pti">PTI Rating</Label>
-              <Input
-                id="pti"
-                type="number"
-                value={pti}
-                onChange={(e) => setPti(e.target.value)}
-                disabled={!editing}
-                min="0"
-                max="100"
-                data-testid="pti-input"
-              />
+              <Label htmlFor="pti" className="flex items-center gap-2">
+                PTI Rating
+                {player?.pti_verified && (
+                  <Badge className="bg-emerald-100 text-emerald-700 text-xs">
+                    <Shield className="w-3 h-3 mr-1" />
+                    League Verified
+                  </Badge>
+                )}
+              </Label>
+              {player?.pti_verified ? (
+                <div className="flex items-center gap-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200">
+                  <div className="text-2xl font-bold text-emerald-600">{player?.pti}</div>
+                  <div className="text-sm text-gray-600">
+                    <p>Official PTI Rating</p>
+                    <p className="text-xs text-gray-500">Updated weekly from league data</p>
+                  </div>
+                </div>
+              ) : (
+                <Input
+                  id="pti"
+                  type="number"
+                  value={pti}
+                  onChange={(e) => setPti(e.target.value)}
+                  disabled={!editing}
+                  min="0"
+                  max="100"
+                  data-testid="pti-input"
+                />
+              )}
             </div>
 
             <div className="space-y-2">
