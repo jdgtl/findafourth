@@ -420,7 +420,15 @@ async def update_player(player_id: str, data: PlayerUpdate, current_player: dict
     if player_id != current_player['id']:
         raise HTTPException(status_code=403, detail="Not authorized")
     
+    # Check if PTI is verified - don't allow PTI updates if verified
+    existing_player = await db.players.find_one({"id": player_id}, {"_id": 0})
+    
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    
+    # If PTI is verified, remove PTI from update data (can't be changed by user)
+    if existing_player and existing_player.get('pti_verified') and 'pti' in update_data:
+        del update_data['pti']
+    
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     
     await db.players.update_one({"id": player_id}, {"$set": update_data})
