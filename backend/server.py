@@ -14,6 +14,7 @@ import bcrypt
 import jwt
 import httpx
 from firecrawl import FirecrawlApp
+from bs4 import BeautifulSoup
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -1523,6 +1524,159 @@ async def clear_pti_roster(current_player: dict = Depends(get_current_player)):
     """Clear all PTI roster data"""
     result = await db.pti_roster.delete_many({})
     return {"message": "PTI roster cleared", "deleted": result.deleted_count}
+
+# ==================== GBPTA SCRAPING ====================
+
+GBPTA_STANDINGS_URL = "https://gbpta.paddlescores.com/print_all_standings.php"
+GBPTA_BASE_URL = "https://gbpta.paddlescores.com"
+
+async def fetch_html(url: str) -> str:
+    """Fetch HTML content from URL"""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        return response.text
+
+def parse_gbpta_standings(html: str) -> List[dict]:
+    """
+    Parse the GBPTA standings page to extract club information.
+    Returns list of clubs with name, league, division, and roster_url.
+
+    Page structure:
+    - h1: League names (Metrowest, North Shore, etc.)
+    - h2: Division names (Division 1, Series 1, etc.)
+    - a[href*='tid=']: Team links within each division
+    """
+    soup = BeautifulSoup(html, 'html.parser')
+    clubs = []
+
+    current_league = None
+    current_division = None
+
+    # Process all elements in order to track context
+    for element in soup.find_all(['h1', 'h2', 'a']):
+        if element.name == 'h1':
+            # Check if this is a target league
+            league_name = element.get_text(strip=True)
+            if league_name in GBPTA_TARGET_LEAGUES:
+                current_league = league_name
+            else:
+                current_league = None
+            current_division = None
+
+        elif element.name == 'h2' and current_league:
+            # This is a division/series under a target league
+            current_division = element.get_text(strip=True)
+
+        elif element.name == 'a' and current_league and current_division:
+            # Check if this is a team link (has tid parameter)
+            href = element.get('href', '')
+            if 'tid=' in href:
+                team_name = element.get_text(strip=True)
+                if team_name:
+                    # Build full URL
+                    roster_url = f"{GBPTA_BASE_URL}{href}" if href.startswith('/') else href
+                    clubs.append({
+                        'name': team_name,
+                        'league': current_league,
+                        'division': current_division,
+                        'roster_url': roster_url
+                    })
+
+    return clubs
+
+@api_router.post("/admin/gbpta/scrape-clubs")
+async def scrape_gbpta_clubs(current_player: dict = Depends(get_current_player)):
+    """
+    Scrape GBPTA standings page to discover all clubs in target leagues.
+    Updates the clubs collection with discovered clubs.
+    """
+    try:
+        # Fetch the standings page
+        html = await fetch_html(GBPTA_STANDINGS_URL)
+
+        # Parse to extract club info
+        club_data = parse_gbpta_standings(html)
+
+        if not club_data:
+            return {
+                "message": "No clubs found in target leagues",
+                "target_leagues": GBPTA_TARGET_LEAGUES
+            }
+
+        # Upsert clubs into database
+        now = datetime.now(timezone.utc).isoformat()
+        inserted = 0
+        updated = 0
+
+        for club in club_data:
+            # Check if club already exists (by name and league)
+            existing = await db.clubs.find_one({
+                "name": club['name'],
+                "league": club['league']
+            })
+
+            if existing:
+                # Update existing club
+                await db.clubs.update_one(
+                    {"id": existing['id']},
+                    {"$set": {
+                        "division": club['division'],
+                        "roster_url": club['roster_url'],
+                        "last_scraped": now
+                    }}
+                )
+                updated += 1
+            else:
+                # Insert new club
+                club_doc = {
+                    "id": str(uuid.uuid4()),
+                    "name": club['name'],
+                    "league": club['league'],
+                    "division": club['division'],
+                    "roster_url": club['roster_url'],
+                    "last_scraped": now,
+                    "created_at": now
+                }
+                await db.clubs.insert_one(club_doc)
+                inserted += 1
+
+        # Get counts by league
+        league_counts = {}
+        for club in club_data:
+            league = club['league']
+            league_counts[league] = league_counts.get(league, 0) + 1
+
+        return {
+            "message": "GBPTA clubs scraped successfully",
+            "total_clubs": len(club_data),
+            "inserted": inserted,
+            "updated": updated,
+            "by_league": league_counts
+        }
+
+    except httpx.HTTPError as e:
+        logger.error(f"HTTP error fetching GBPTA standings: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Failed to fetch GBPTA standings: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error scraping GBPTA clubs: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Scraping failed: {str(e)}")
+
+@api_router.get("/admin/gbpta/clubs")
+async def get_gbpta_clubs(
+    league: Optional[str] = None,
+    current_player: dict = Depends(get_current_player)
+):
+    """Get all scraped GBPTA clubs, optionally filtered by league"""
+    query = {}
+    if league:
+        query["league"] = league
+
+    clubs = await db.clubs.find(query, {"_id": 0}).to_list(1000)
+    return {
+        "clubs": clubs,
+        "total": len(clubs)
+    }
 
 # ==================== UTILITY ROUTES ====================
 
