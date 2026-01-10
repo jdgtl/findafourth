@@ -5,6 +5,13 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_all_tests:
+        description: 'Run all tests regardless of changes'
+        required: false
+        default: 'false'
+        type: boolean
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_NA4 }}
@@ -40,9 +47,21 @@ jobs:
           RUN_UNIT="false"
           FEATURES=""
 
+          # Force all tests if manually triggered with force_all_tests
+          if [ "${{ inputs.force_all_tests }}" == "true" ]; then
+            RUN_E2E="true"
+            RUN_UNIT="true"
+          fi
+
+          # Frontend source changes trigger both
           if echo "$CHANGED" | grep -qE "pages/|components/|contexts/"; then
             RUN_E2E="true"
             RUN_UNIT="true"
+          fi
+
+          # Test infrastructure changes trigger E2E
+          if echo "$CHANGED" | grep -qE "e2e/|playwright|\.spec\.|\.test\."; then
+            RUN_E2E="true"
           fi
 
           if echo "$CHANGED" | grep -qE "lib/|utils"; then
