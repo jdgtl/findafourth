@@ -1254,42 +1254,45 @@ async def lookup_pti(name: str, current_player: dict = Depends(get_current_playe
     """
     Fuzzy match a player name against the PTI roster.
     Returns best match if score > 70, otherwise returns no match.
+    Now includes clubs array for multi-club player support.
     """
     if not name or len(name.strip()) < 2:
         return {"match": None, "suggestions": []}
-    
+
     # Get all PTI roster entries
     roster = await db.pti_roster.find({}, {"_id": 0}).to_list(1000)
-    
+
     if not roster:
         return {"match": None, "suggestions": []}
-    
+
     # Calculate match scores for all players
     matches = []
     for entry in roster:
         player_name = entry.get('player_name', '')
         if not player_name:
             continue
-        
+
         score = fuzzy_match_score(name, player_name)
         matches.append({
             "player_name": player_name,
             "pti_value": entry.get('pti_value'),
-            "source_url": entry.get('source_url'),
+            "clubs": entry.get('clubs', []),
+            "profile_source_url": entry.get('profile_source_url'),
+            "profile_image_url": entry.get('profile_image_url'),
             "score": score
         })
-    
+
     # Sort by score descending
     matches.sort(key=lambda x: x['score'], reverse=True)
-    
+
     # Get best match if score > 70
     best_match = None
     if matches and matches[0]['score'] >= 70:
         best_match = matches[0]
-    
-    # Return top 5 suggestions for dropdown
+
+    # Return top 10 suggestions for dropdown
     suggestions = [m for m in matches[:10] if m['pti_value'] is not None]
-    
+
     return {
         "match": best_match,
         "suggestions": suggestions
@@ -1300,7 +1303,7 @@ async def get_pti_roster_list(current_player: dict = Depends(get_current_player)
     """Get simplified PTI roster list for dropdown selection"""
     roster = await db.pti_roster.find(
         {"pti_value": {"$ne": None}},  # Only players with PTI
-        {"_id": 0, "player_name": 1, "pti_value": 1}
+        {"_id": 0, "player_name": 1, "pti_value": 1, "clubs": 1}
     ).sort("player_name", 1).to_list(1000)
 
     return {"players": roster}
