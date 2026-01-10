@@ -2021,6 +2021,23 @@ async def full_gbpta_sync(current_player: dict = Depends(get_current_player)):
 
         results['deduplication'] = {"unique_players": len(deduped_entries)}
 
+        # Step 4: Record PTI history
+        logger.info("GBPTA full sync - Step 4: Recording PTI history")
+        history_entries = []
+        for entry in deduped_entries:
+            if entry.get('pti_value') is not None:
+                history_entries.append({
+                    'id': str(uuid.uuid4()),
+                    'player_name': normalize_name(entry['player_name']),
+                    'pti_value': entry['pti_value'],
+                    'recorded_at': now
+                })
+
+        if history_entries:
+            await db.pti_history.insert_many(history_entries)
+
+        results['pti_history'] = {"records_added": len(history_entries)}
+
         logger.info("GBPTA full sync complete")
         return {
             "message": "Full GBPTA sync complete",
@@ -2030,6 +2047,48 @@ async def full_gbpta_sync(current_player: dict = Depends(get_current_player)):
     except Exception as e:
         logger.error(f"Error in full GBPTA sync: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Full sync failed: {str(e)}")
+
+@api_router.post("/admin/gbpta/record-pti-history")
+async def record_pti_history(current_player: dict = Depends(get_current_player)):
+    """
+    Record current PTI values from pti_roster to pti_history.
+    This creates a snapshot of all player PTI values for historical tracking.
+    Should be run weekly (Tuesdays) after roster sync.
+    """
+    try:
+        # Get current roster
+        roster = await db.pti_roster.find({}, {"_id": 0}).to_list(10000)
+
+        if not roster:
+            return {
+                "message": "No roster data found. Run /admin/gbpta/full-sync first.",
+                "recorded": 0
+            }
+
+        now = datetime.now(timezone.utc).isoformat()
+        history_entries = []
+
+        for entry in roster:
+            if entry.get('pti_value') is not None:
+                history_entries.append({
+                    'id': str(uuid.uuid4()),
+                    'player_name': normalize_name(entry['player_name']),
+                    'pti_value': entry['pti_value'],
+                    'recorded_at': now
+                })
+
+        if history_entries:
+            await db.pti_history.insert_many(history_entries)
+
+        return {
+            "message": "PTI history recorded",
+            "records_added": len(history_entries),
+            "timestamp": now
+        }
+
+    except Exception as e:
+        logger.error(f"Error recording PTI history: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to record PTI history: {str(e)}")
 
 # ==================== UTILITY ROUTES ====================
 
