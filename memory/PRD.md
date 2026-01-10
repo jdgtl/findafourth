@@ -101,6 +101,14 @@ NeedaFourth is a mobile-first Progressive Web App (PWA) for platform tennis play
 - Minor frontend linting errors (unescaped entities)
 
 ## Changelog
+- **Jan 10, 2026:** Implemented PTI Lookup "Magic" during registration
+  - Animated step-by-step lookup: "Connecting..." → "Searching..." → "Match found!"
+  - Fuzzy name matching with 70%+ threshold for auto-match
+  - Confirmation UI: "Yes, that's me" / "That's not me"
+  - Fallback: Searchable dropdown of all 86 league players
+  - Manual entry option for players not in roster
+  - "Verified" badge for confirmed PTI ratings
+  
 - **Jan 9, 2026:** Implemented PTI scraping system with Firecrawl integration
   - Added `/api/admin/pti-roster/*` endpoints
   - Supports JSON import with deduplication (by name + PTI)
