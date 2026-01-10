@@ -207,6 +207,7 @@ const CompleteProfile = () => {
         home_club: homeClub.trim(),
         other_clubs: otherClubs,
         pti: pti ? parseInt(pti) : null,
+        pti_verified: ptiVerified,
         phone: phone.trim() || null,
       });
       navigate('/home');
