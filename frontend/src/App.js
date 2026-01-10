@@ -16,6 +16,8 @@ import CreateAvailability from "@/pages/CreateAvailability";
 import Crews from "@/pages/Crews";
 import CreateCrew from "@/pages/CreateCrew";
 import CrewDetail from "@/pages/CrewDetail";
+import ClubList from "@/pages/ClubList";
+import ClubDetail from "@/pages/ClubDetail";
 import Favorites from "@/pages/Favorites";
 import Profile from "@/pages/Profile";
 
@@ -155,6 +157,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <CrewDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/clubs"
+        element={
+          <ProtectedRoute>
+            <ClubList />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/clubs/:id"
+        element={
+          <ProtectedRoute>
+            <ClubDetail />
           </ProtectedRoute>
         }
       />
