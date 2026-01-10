@@ -427,14 +427,14 @@ const CompleteProfile = () => {
                   {ptiVerified && (
                     <Badge className="bg-emerald-100 text-emerald-700 text-xs">
                       <Shield className="w-3 h-3 mr-1" />
-                      Verified
+                      APTA Verified
                     </Badge>
                   )}
                 </Label>
                 {ptiVerified ? (
                   <div className="flex items-center gap-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200">
                     <div className="text-2xl font-bold text-emerald-600">{pti}</div>
-                    <div className="text-sm text-gray-600">Official PTI Rating</div>
+                    <div className="text-sm text-gray-600">APTA Official Rating</div>
                     <Button
                       type="button"
                       variant="ghost"
