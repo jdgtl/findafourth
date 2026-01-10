@@ -249,14 +249,14 @@ const CompleteProfile = () => {
             <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center">
               <Check className="w-5 h-5 text-white" />
             </div>
-            <span className="text-emerald-700 font-semibold">We found your official PTI rating!</span>
+            <span className="text-emerald-700 font-semibold">We found your APTA rating!</span>
           </div>
           
           <div className="bg-white rounded-lg p-4 border border-emerald-200 mb-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-lg font-bold text-gray-900">{ptiMatch.player_name}</p>
-                <p className="text-sm text-gray-500">League-verified rating</p>
+                <p className="text-sm text-gray-500">APTA Verified Rating</p>
               </div>
               <div className="text-right">
                 <p className="text-3xl font-bold text-emerald-600">{ptiMatch.pti_value}</p>
