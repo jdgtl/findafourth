@@ -61,17 +61,23 @@ const Profile = () => {
     setLoading(true);
 
     try {
-      const response = await playerAPI.update(player.id, {
+      const updateData = {
         name: name.trim(),
         home_club: homeClub.trim(),
         other_clubs: otherClubs,
-        pti: pti ? parseInt(pti) : null,
         phone: phone.trim() || null,
         notify_push: notifyPush,
         notify_email: notifyEmail,
         notify_sms: notifySms,
         visibility,
-      });
+      };
+      
+      // Only include PTI in update if not verified
+      if (!player?.pti_verified) {
+        updateData.pti = pti ? parseInt(pti) : null;
+      }
+      
+      const response = await playerAPI.update(player.id, updateData);
       updatePlayer(response.data);
       setSuccess('Profile updated successfully!');
       setEditing(false);
