@@ -1530,9 +1530,15 @@ async def clear_pti_roster(current_player: dict = Depends(get_current_player)):
 GBPTA_STANDINGS_URL = "https://gbpta.paddlescores.com/print_all_standings.php"
 GBPTA_BASE_URL = "https://gbpta.paddlescores.com"
 
+SCRAPER_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.5',
+}
+
 async def fetch_html(url: str) -> str:
-    """Fetch HTML content from URL"""
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    """Fetch HTML content from URL with browser-like headers"""
+    async with httpx.AsyncClient(timeout=30.0, headers=SCRAPER_HEADERS, follow_redirects=True) as client:
         response = await client.get(url)
         response.raise_for_status()
         return response.text
@@ -1677,6 +1683,149 @@ async def get_gbpta_clubs(
         "clubs": clubs,
         "total": len(clubs)
     }
+
+def parse_roster_page(html: str, club_name: str) -> List[dict]:
+    """
+    Parse a club roster page to extract player information.
+    Returns list of players with name, pti_value, and profile_source_url.
+
+    Table structure:
+    - Row 0: Header (Team Name, R, W, L)
+    - Row 1+: May have section headers like "Captains", "Alternates"
+    - Player rows: [checkmark+number+name+(C/CC), PTI, Wins, Losses]
+    """
+    soup = BeautifulSoup(html, 'html.parser')
+    players = []
+
+    # Find the roster table - class contains 'team_roster_table'
+    roster_table = soup.find('table', class_='team_roster_table')
+    if not roster_table:
+        return players
+
+    # Find all rows in the table
+    rows = roster_table.find_all('tr')
+
+    for row in rows:
+        cells = row.find_all('td')
+        if len(cells) < 2:
+            continue
+
+        # Find player link in the first cell
+        player_link = cells[0].find('a', href=lambda h: h and 'player.php' in h)
+        if not player_link:
+            continue
+
+        # Extract player name (remove captain designation like "(C)" or "(CC)")
+        player_name = player_link.get_text(strip=True)
+        # Remove captain designations
+        for suffix in ['(C)', '(c)', '(CC)', '(cc)']:
+            player_name = player_name.replace(suffix, '')
+        player_name = player_name.strip()
+
+        # Extract profile URL
+        profile_url = player_link.get('href', '')
+        if profile_url.startswith('/'):
+            profile_url = f"{GBPTA_BASE_URL}{profile_url}"
+
+        # PTI is in the second cell (index 1) - the "R" column
+        pti_value = None
+        if len(cells) > 1:
+            pti_text = cells[1].get_text(strip=True)
+            try:
+                pti_value = float(pti_text)
+            except ValueError:
+                pass
+
+        if player_name:
+            players.append({
+                'player_name': player_name,
+                'pti_value': pti_value,
+                'profile_source_url': profile_url,
+                'club': club_name
+            })
+
+    return players
+
+@api_router.post("/admin/gbpta/scrape-rosters")
+async def scrape_gbpta_rosters(
+    league: Optional[str] = None,
+    current_player: dict = Depends(get_current_player)
+):
+    """
+    Scrape all club roster pages to extract player information.
+    Optionally filter by league. Updates the pti_roster collection.
+    """
+    try:
+        # Get clubs to scrape
+        query = {}
+        if league:
+            query["league"] = league
+
+        clubs = await db.clubs.find(query, {"_id": 0}).to_list(1000)
+
+        if not clubs:
+            return {
+                "message": "No clubs found. Run /admin/gbpta/scrape-clubs first.",
+                "scraped": 0
+            }
+
+        all_players = []
+        club_results = []
+        errors = []
+
+        async with httpx.AsyncClient(timeout=30.0, headers=SCRAPER_HEADERS, follow_redirects=True) as client:
+            for club in clubs:
+                try:
+                    # Fetch the roster page
+                    response = await client.get(club['roster_url'])
+                    response.raise_for_status()
+
+                    # Parse the roster
+                    players = parse_roster_page(response.text, club['name'])
+                    all_players.extend(players)
+
+                    club_results.append({
+                        "club": club['name'],
+                        "league": club['league'],
+                        "players_found": len(players)
+                    })
+
+                    # Update club's last_scraped timestamp
+                    await db.clubs.update_one(
+                        {"id": club['id']},
+                        {"$set": {"last_scraped": datetime.now(timezone.utc).isoformat()}}
+                    )
+
+                except Exception as e:
+                    errors.append({
+                        "club": club['name'],
+                        "error": str(e)
+                    })
+                    logger.error(f"Error scraping roster for {club['name']}: {str(e)}")
+
+        # Store players in pti_roster (will be deduplicated in next step)
+        now = datetime.now(timezone.utc).isoformat()
+        for player in all_players:
+            player['id'] = str(uuid.uuid4())
+            player['scraped_at'] = now
+
+        # Clear existing roster and insert new data
+        if all_players:
+            await db.pti_roster_raw.delete_many({})
+            await db.pti_roster_raw.insert_many(all_players)
+
+        return {
+            "message": "Roster scraping complete",
+            "total_clubs_scraped": len(club_results),
+            "total_players_found": len(all_players),
+            "errors": len(errors),
+            "club_results": club_results[:10],  # First 10 for brevity
+            "error_details": errors[:5] if errors else []
+        }
+
+    except Exception as e:
+        logger.error(f"Error in roster scraping: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Roster scraping failed: {str(e)}")
 
 # ==================== UTILITY ROUTES ====================
 
