@@ -291,6 +291,7 @@ jobs:
         run: |
           npx playwright merge-reports --reporter html ./all-reports
         working-directory: frontend
+        continue-on-error: true  # Merge is optional - individual shard reports are available
 
       - name: Upload merged report
         uses: actions/upload-artifact@v4
