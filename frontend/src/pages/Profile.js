@@ -22,7 +22,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Loader2, X, LogOut, Trash2, User, Bell, Eye } from 'lucide-react';
+import { Loader2, X, LogOut, Trash2, User, Bell, Eye, Shield } from 'lucide-react';
 
 const Profile = () => {
   const navigate = useNavigate();
