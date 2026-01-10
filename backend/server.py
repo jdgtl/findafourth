@@ -80,6 +80,7 @@ class PlayerUpdate(BaseModel):
     home_club: Optional[str] = None
     other_clubs: Optional[List[str]] = None
     pti: Optional[int] = None
+    profile_image_url: Optional[str] = None
     notify_push: Optional[bool] = None
     notify_sms: Optional[bool] = None
     notify_email: Optional[bool] = None
@@ -93,6 +94,8 @@ class Player(BaseModel):
     home_club: Optional[str] = None
     other_clubs: List[str] = []
     pti: Optional[int] = None
+    pti_verified: bool = False  # True if PTI was matched from scraped roster
+    profile_image_url: Optional[str] = None  # User-uploaded or scraped profile image
     notify_push: bool = True
     notify_sms: bool = False
     notify_email: bool = True
@@ -107,6 +110,8 @@ class PlayerPublic(BaseModel):
     home_club: Optional[str]
     other_clubs: List[str]
     pti: Optional[int]
+    pti_verified: bool = False
+    profile_image_url: Optional[str] = None
 
 # Auth Models
 class LoginRequest(BaseModel):
@@ -216,12 +221,36 @@ class AvailabilityPost(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # PTI Roster Models (for scraped data)
+
+# Placeholder image for players without profile photos
+DEFAULT_PROFILE_IMAGE = "/images/default-avatar.png"
+
+class Club(BaseModel):
+    """Represents a paddle tennis club scraped from GBPTA"""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    league: str  # Metrowest, North Shore, Metrowest Women's Day League
+    division: Optional[str] = None
+    roster_url: str
+    last_scraped: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
 class PTIPlayerEntry(BaseModel):
+    """Player entry from scraped PTI roster data"""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     player_name: str
-    pti_value: float
-    source_url: Optional[str] = None
+    pti_value: Optional[float] = None
+    profile_image_url: Optional[str] = None  # URL to player's profile image
+    clubs: List[str] = []  # List of club names player belongs to
+    profile_source_url: Optional[str] = None  # Link to player's profile page
     scraped_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class PTIHistory(BaseModel):
+    """Historical PTI record for tracking player rating over time"""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    player_name: str  # Normalized player name for matching
+    pti_value: float
+    recorded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class PTIImportRequest(BaseModel):
     players: List[dict]  # List of {player_name, pti_value, source_url?}
@@ -229,6 +258,13 @@ class PTIImportRequest(BaseModel):
 class PTIScrapeRequest(BaseModel):
     urls: List[str]
     prompt: Optional[str] = None
+
+# Target leagues for GBPTA scraping
+GBPTA_TARGET_LEAGUES = [
+    "Metrowest",
+    "North Shore",
+    "Metrowest Women's Day League"
+]
 
 # ==================== HELPER FUNCTIONS ====================
 
