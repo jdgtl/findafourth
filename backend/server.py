@@ -3,8 +3,10 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from contextlib import asynccontextmanager
 import os
 import logging
+import asyncio
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Any
@@ -15,6 +17,8 @@ import jwt
 import httpx
 from firecrawl import FirecrawlApp
 from bs4 import BeautifulSoup
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -32,21 +36,221 @@ JWT_EXPIRATION_HOURS = 24 * 7  # 7 days
 # Firecrawl Configuration
 FIRECRAWL_API_KEY = os.environ.get('FIRECRAWL_API_KEY', '')
 
-# Create the main app
-app = FastAPI(title="NeedaFourth API")
-
-# Create a router with the /api prefix
-api_router = APIRouter(prefix="/api")
-
-# Security
-security = HTTPBearer()
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Scheduler for automated tasks
+scheduler = AsyncIOScheduler()
+
+async def run_gbpta_full_sync():
+    """
+    Execute the full GBPTA sync pipeline.
+    Called by the scheduler on Tuesdays.
+    This is a wrapper that directly interacts with the database.
+    """
+    logger.info("Starting scheduled GBPTA sync...")
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Step 1: Scrape clubs from standings page
+        logger.info("Scheduled sync - Step 1: Scraping clubs")
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        }
+        target_leagues = ["Metrowest", "North Shore", "Metrowest Women's Day League"]
+        base_url = "https://gbpta.paddlescores.com"
+
+        async with httpx.AsyncClient(timeout=30.0, headers=headers, follow_redirects=True) as http_client:
+            # Fetch standings page
+            response = await http_client.get(f"{base_url}/print_all_standings.php")
+            response.raise_for_status()
+            html = response.text
+
+        # Parse standings
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html, 'html.parser')
+        club_data = []
+        current_league = None
+        current_division = None
+
+        for element in soup.find_all(['h1', 'h2', 'a']):
+            if element.name == 'h1':
+                league_name = element.get_text(strip=True)
+                current_league = league_name if league_name in target_leagues else None
+                current_division = None
+            elif element.name == 'h2' and current_league:
+                current_division = element.get_text(strip=True)
+            elif element.name == 'a' and current_league and current_division:
+                href = element.get('href', '')
+                if 'tid=' in href:
+                    team_name = element.get_text(strip=True)
+                    if team_name:
+                        roster_url = f"{base_url}{href}" if href.startswith('/') else href
+                        club_data.append({
+                            'name': team_name,
+                            'league': current_league,
+                            'division': current_division,
+                            'roster_url': roster_url
+                        })
+
+        # Upsert clubs
+        for club in club_data:
+            existing = await db.clubs.find_one({"name": club['name'], "league": club['league']})
+            if existing:
+                await db.clubs.update_one(
+                    {"id": existing['id']},
+                    {"$set": {"division": club['division'], "roster_url": club['roster_url'], "last_scraped": now}}
+                )
+            else:
+                await db.clubs.insert_one({
+                    "id": str(uuid.uuid4()),
+                    **club,
+                    "last_scraped": now,
+                    "created_at": now
+                })
+
+        logger.info(f"Scheduled sync - Found {len(club_data)} clubs")
+
+        # Step 2: Scrape rosters
+        logger.info("Scheduled sync - Step 2: Scraping rosters")
+        clubs = await db.clubs.find({}, {"_id": 0}).to_list(1000)
+        all_players = []
+
+        async with httpx.AsyncClient(timeout=30.0, headers=headers, follow_redirects=True) as http_client:
+            for club in clubs:
+                try:
+                    response = await http_client.get(club['roster_url'])
+                    response.raise_for_status()
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    roster_table = soup.find('table', class_='team_roster_table')
+                    if roster_table:
+                        for row in roster_table.find_all('tr'):
+                            cells = row.find_all('td')
+                            if len(cells) >= 2:
+                                player_link = cells[0].find('a', href=lambda h: h and 'player.php' in h)
+                                if player_link:
+                                    player_name = player_link.get_text(strip=True)
+                                    for suffix in ['(C)', '(c)', '(CC)', '(cc)']:
+                                        player_name = player_name.replace(suffix, '')
+                                    player_name = player_name.strip()
+                                    pti_value = None
+                                    if len(cells) > 1:
+                                        try:
+                                            pti_value = float(cells[1].get_text(strip=True))
+                                        except ValueError:
+                                            pass
+                                    profile_url = player_link.get('href', '')
+                                    if profile_url.startswith('/'):
+                                        profile_url = f"{base_url}{profile_url}"
+                                    if player_name:
+                                        all_players.append({
+                                            'player_name': player_name,
+                                            'pti_value': pti_value,
+                                            'profile_source_url': profile_url,
+                                            'club': club['name']
+                                        })
+                except Exception as e:
+                    logger.error(f"Error scraping {club['name']}: {e}")
+
+        for player in all_players:
+            player['id'] = str(uuid.uuid4())
+            player['scraped_at'] = now
+
+        if all_players:
+            await db.pti_roster_raw.delete_many({})
+            await db.pti_roster_raw.insert_many(all_players)
+
+        logger.info(f"Scheduled sync - Found {len(all_players)} player entries")
+
+        # Step 3: Deduplicate
+        logger.info("Scheduled sync - Step 3: Deduplicating")
+        raw_entries = await db.pti_roster_raw.find({}, {"_id": 0}).to_list(10000)
+        player_map = {}
+
+        for entry in raw_entries:
+            name = entry.get('player_name', '').lower().strip()
+            if not name:
+                continue
+            if name not in player_map:
+                player_map[name] = {
+                    'player_name': entry['player_name'],
+                    'pti_value': entry.get('pti_value'),
+                    'clubs': [],
+                    'profile_source_url': entry.get('profile_source_url'),
+                }
+            club = entry.get('club')
+            if club and club not in player_map[name]['clubs']:
+                player_map[name]['clubs'].append(club)
+            if entry.get('pti_value') is not None:
+                player_map[name]['pti_value'] = entry['pti_value']
+
+        deduped_entries = []
+        for normalized_name, data in player_map.items():
+            deduped_entries.append({
+                'id': str(uuid.uuid4()),
+                'player_name': data['player_name'],
+                'pti_value': data['pti_value'],
+                'clubs': data['clubs'],
+                'profile_image_url': None,
+                'profile_source_url': data['profile_source_url'],
+                'scraped_at': now
+            })
+
+        await db.pti_roster.delete_many({})
+        if deduped_entries:
+            await db.pti_roster.insert_many(deduped_entries)
+
+        logger.info(f"Scheduled sync - {len(deduped_entries)} unique players")
+
+        # Step 4: Record PTI history
+        logger.info("Scheduled sync - Step 4: Recording PTI history")
+        history_entries = []
+        for entry in deduped_entries:
+            if entry.get('pti_value') is not None:
+                history_entries.append({
+                    'id': str(uuid.uuid4()),
+                    'player_name': entry['player_name'].lower().strip(),
+                    'pti_value': entry['pti_value'],
+                    'recorded_at': now
+                })
+
+        if history_entries:
+            await db.pti_history.insert_many(history_entries)
+
+        logger.info(f"Scheduled GBPTA sync complete: {len(club_data)} clubs, {len(deduped_entries)} players, {len(history_entries)} history records")
+
+    except Exception as e:
+        logger.error(f"Scheduled GBPTA sync failed: {e}")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan - start/stop scheduler"""
+    # Schedule GBPTA sync for every Tuesday at 6:00 AM EST (11:00 UTC)
+    scheduler.add_job(
+        run_gbpta_full_sync,
+        CronTrigger(day_of_week='tue', hour=11, minute=0),  # 11:00 UTC = 6:00 AM EST
+        id='gbpta_sync',
+        replace_existing=True
+    )
+    scheduler.start()
+    logger.info("Scheduler started - GBPTA sync scheduled for Tuesdays at 6:00 AM EST")
+    yield
+    scheduler.shutdown()
+    logger.info("Scheduler stopped")
+
+# Create the main app with lifespan
+app = FastAPI(title="NeedaFourth API", lifespan=lifespan)
+
+# Create a router with the /api prefix
+api_router = APIRouter(prefix="/api")
+
+# Security
+security = HTTPBearer()
 
 # ==================== MODELS ====================
 
