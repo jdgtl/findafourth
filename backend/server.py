@@ -1302,8 +1302,48 @@ async def get_pti_roster_list(current_player: dict = Depends(get_current_player)
         {"pti_value": {"$ne": None}},  # Only players with PTI
         {"_id": 0, "player_name": 1, "pti_value": 1}
     ).sort("player_name", 1).to_list(1000)
-    
+
     return {"players": roster}
+
+@api_router.get("/pti/history")
+async def get_pti_history(
+    player_name: str,
+    limit: int = 52,  # Default to 1 year of weekly records
+    current_player: dict = Depends(get_current_player)
+):
+    """
+    Get PTI history for a player.
+    Used for displaying PTI trend graph on profile page.
+    Returns historical PTI values sorted by date (oldest first).
+    """
+    # Normalize the player name for matching
+    normalized_name = normalize_name(player_name)
+
+    if not normalized_name:
+        raise HTTPException(status_code=400, detail="Player name is required")
+
+    # Find history records for this player
+    history = await db.pti_history.find(
+        {"player_name": normalized_name},
+        {"_id": 0, "pti_value": 1, "recorded_at": 1}
+    ).sort("recorded_at", 1).limit(limit).to_list(limit)
+
+    # Get current PTI from roster if available
+    current_entry = await db.pti_roster.find_one(
+        {"player_name": {"$regex": f"^{player_name}$", "$options": "i"}},
+        {"_id": 0, "pti_value": 1, "scraped_at": 1}
+    )
+
+    current_pti = None
+    if current_entry:
+        current_pti = current_entry.get('pti_value')
+
+    return {
+        "player_name": player_name,
+        "current_pti": current_pti,
+        "history": history,
+        "total_records": len(history)
+    }
 
 @api_router.post("/admin/pti-roster/import")
 async def import_pti_roster(data: PTIImportRequest, current_player: dict = Depends(get_current_player)):
