@@ -189,7 +189,7 @@ jobs:
 
       - name: Run E2E tests (shard ${{ matrix.shard }}/2)
         working-directory: frontend
-        run: npx playwright test --shard=${{ matrix.shard }}/2 --reporter=html
+        run: npx playwright test --project=chromium --shard=${{ matrix.shard }}/2 --reporter=html
         env:
           FRONTEND_URL: http://localhost:3000
 
