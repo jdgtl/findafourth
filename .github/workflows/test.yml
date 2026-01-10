@@ -99,10 +99,14 @@ jobs:
           path: frontend/coverage/
 
   e2e-tests:
-    name: E2E Tests
+    name: E2E Tests (Shard ${{ matrix.shard }})
     needs: analyze
     if: needs.analyze.outputs.run_e2e == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     services:
       mongodb:
         image: mongo:7
@@ -164,9 +168,9 @@ jobs:
           npx serve -s build -l 3000 &
           sleep 5
 
-      - name: Run E2E tests
+      - name: Run E2E tests (shard ${{ matrix.shard }}/2)
         working-directory: frontend
-        run: npx playwright test --reporter=html
+        run: npx playwright test --shard=${{ matrix.shard }}/2 --reporter=html
         env:
           FRONTEND_URL: http://localhost:3000
 
@@ -174,14 +178,14 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: playwright-report
+          name: playwright-report-shard-${{ matrix.shard }}
           path: frontend/playwright-report/
           retention-days: 30
 
   intelligent-agent:
     name: Claude Test Agent
     needs: [analyze]
-    if: github.event_name == 'pull_request' && needs.analyze.outputs.run_e2e == 'true'
+    if: needs.analyze.outputs.run_e2e == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -196,10 +200,19 @@ jobs:
       - name: Install agent dependencies
         run: pip install anthropic
 
+      - name: Determine base ref
+        id: base
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "ref=origin/${{ github.base_ref }}" >> $GITHUB_OUTPUT
+          else
+            echo "ref=HEAD~1" >> $GITHUB_OUTPUT
+          fi
+
       - name: Run Intelligent Test Agent
         run: |
           python scripts/intelligent_test_agent.py \
-            --base-ref origin/${{ github.base_ref }} \
+            --base-ref ${{ steps.base.outputs.ref }} \
             --skip-e2e \
             --output test-agent-report.md
         env:
@@ -215,7 +228,7 @@ jobs:
 
       - name: Comment on PR
         uses: actions/github-script@v7
-        if: always()
+        if: always() && github.event_name == 'pull_request'
         with:
           script: |
             const fs = require('fs');
@@ -235,9 +248,40 @@ jobs:
               });
             }
 
+  merge-reports:
+    name: Merge E2E Reports
+    needs: [e2e-tests]
+    if: always() && needs.e2e-tests.result != 'skipped'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Download shard reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: playwright-report-shard-*
+          path: all-reports
+
+      - name: Merge reports
+        run: |
+          npx playwright merge-reports --reporter html ./all-reports
+        working-directory: frontend
+
+      - name: Upload merged report
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-merged
+          path: frontend/playwright-report/
+          retention-days: 30
+
   report:
     name: Test Summary
-    needs: [unit-tests, e2e-tests]
+    needs: [unit-tests, e2e-tests, merge-reports]
     if: always()
     runs-on: ubuntu-latest
     steps:
