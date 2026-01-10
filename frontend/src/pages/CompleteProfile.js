@@ -419,7 +419,7 @@ const CompleteProfile = () => {
             {renderPtiLookup()}
 
             {/* Show PTI field only if verified or manual entry */}
-            {(ptiVerified || ptiLookupState === 'manual' || ptiLookupState === 'idle') && ptiLookupState !== 'searching' && ptiLookupState !== 'found' && ptiLookupState !== 'not_found' && (
+            {(ptiVerified || ptiLookupState === 'manual') && (
               <div className="space-y-2">
                 <Label htmlFor="pti" className="flex items-center gap-2">
                   PTI Rating
