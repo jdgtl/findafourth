@@ -55,6 +55,13 @@ venv/
 # Uploaded files
 backend/uploads/
 
+# Test artifacts
+frontend/playwright-report/
+frontend/test-results/
+frontend/coverage/
+test-report.md
+test-agent-report.md
+
 # Development tools
 chainlit.md
 .chainlit
