@@ -2,7 +2,8 @@ import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { getProfileImageUrl } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { Calendar, MapPin } from 'lucide-react';
 
@@ -32,6 +33,7 @@ const AvailabilityCard = ({ post, onInvite, isOwn }) => {
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <Avatar className="w-10 h-10">
+              <AvatarImage src={getProfileImageUrl(post.player?.profile_image_url)} />
               <AvatarFallback className="bg-emerald-100 text-emerald-700">
                 {getInitials(post.player?.name)}
               </AvatarFallback>

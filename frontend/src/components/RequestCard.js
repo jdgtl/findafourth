@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { getProfileImageUrl } from '@/lib/utils';
 import { format, isToday, isTomorrow, parseISO } from 'date-fns';
 import { MapPin, Clock, Users, ChevronDown, ChevronUp, Check, Hourglass } from 'lucide-react';
 
@@ -146,6 +147,7 @@ const RequestCard = ({ request, isOrganizer, myResponse, onRespond, onClick }) =
             {/* Organizer */}
             <div className="flex items-center gap-2 mt-3">
               <Avatar className="w-6 h-6">
+                <AvatarImage src={getProfileImageUrl(request.organizer?.profile_image_url)} />
                 <AvatarFallback className="bg-gray-200 text-gray-600 text-xs">
                   {getInitials(request.organizer?.name)}
                 </AvatarFallback>

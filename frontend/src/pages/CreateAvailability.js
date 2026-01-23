@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { availabilityAPI } from '@/lib/api';
+import { availabilityAPI, clubAPI } from '@/lib/api';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,8 +10,22 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ArrowLeft, X } from 'lucide-react';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Loader2, ArrowLeft, X, ChevronsUpDown, Check, Plus } from 'lucide-react';
 import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 const CreateAvailability = () => {
   const navigate = useNavigate();
@@ -19,20 +33,62 @@ const CreateAvailability = () => {
 
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [message, setMessage] = useState('');
-  const [clubs, setClubs] = useState([player?.home_club, ...(player?.other_clubs || [])].filter(Boolean));
-  const [newClub, setNewClub] = useState('');
+  const [selectedClubs, setSelectedClubs] = useState([]);
+  const [allClubs, setAllClubs] = useState([]);
+  const [loadingClubs, setLoadingClubs] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [showOtherInput, setShowOtherInput] = useState(false);
+  const [otherClub, setOtherClub] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleAddClub = () => {
-    if (newClub.trim() && !clubs.includes(newClub.trim())) {
-      setClubs([...clubs, newClub.trim()]);
-      setNewClub('');
+  // Fetch clubs on mount
+  useEffect(() => {
+    const fetchClubs = async () => {
+      try {
+        const response = await clubAPI.getNames();
+        setAllClubs(response.data);
+      } catch (err) {
+        console.error('Failed to fetch clubs:', err);
+      } finally {
+        setLoadingClubs(false);
+      }
+    };
+    fetchClubs();
+  }, []);
+
+  // Initialize with player's clubs
+  useEffect(() => {
+    if (player) {
+      const playerClubs = [player.home_club, ...(player.other_clubs || [])].filter(Boolean);
+      setSelectedClubs(playerClubs);
+    }
+  }, [player]);
+
+  const handleSelectClub = (clubName) => {
+    if (clubName === '__other__') {
+      setShowOtherInput(true);
+      setOpen(false);
+      return;
+    }
+
+    if (selectedClubs.includes(clubName)) {
+      setSelectedClubs(selectedClubs.filter((c) => c !== clubName));
+    } else {
+      setSelectedClubs([...selectedClubs, clubName]);
+    }
+  };
+
+  const handleAddOtherClub = () => {
+    if (otherClub.trim() && !selectedClubs.includes(otherClub.trim())) {
+      setSelectedClubs([...selectedClubs, otherClub.trim()]);
+      setOtherClub('');
+      setShowOtherInput(false);
     }
   };
 
   const handleRemoveClub = (club) => {
-    setClubs(clubs.filter((c) => c !== club));
+    setSelectedClubs(selectedClubs.filter((c) => c !== club));
   };
 
   const handleSubmit = async (e) => {
@@ -50,7 +106,7 @@ const CreateAvailability = () => {
       await availabilityAPI.create({
         message: message.trim(),
         available_date: date,
-        clubs,
+        clubs: selectedClubs,
       });
       navigate('/home');
     } catch (err) {
@@ -111,21 +167,95 @@ const CreateAvailability = () => {
 
               <div className="space-y-2">
                 <Label>Where can you play?</Label>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Add a club"
-                    value={newClub}
-                    onChange={(e) => setNewClub(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddClub())}
-                    data-testid="club-input"
-                  />
-                  <Button type="button" variant="outline" onClick={handleAddClub}>
-                    Add
-                  </Button>
-                </div>
-                {clubs.length > 0 && (
+                <Popover open={open} onOpenChange={setOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={open}
+                      className="w-full justify-between"
+                      disabled={loadingClubs}
+                      data-testid="club-select-trigger"
+                    >
+                      {loadingClubs ? (
+                        <span className="text-muted-foreground">Loading clubs...</span>
+                      ) : selectedClubs.length > 0 ? (
+                        <span className="text-muted-foreground">
+                          {selectedClubs.length} club{selectedClubs.length !== 1 ? 's' : ''} selected
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">Select clubs...</span>
+                      )}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command shouldFilter={true}>
+                      <CommandInput placeholder="Search clubs..." />
+                      <CommandList>
+                        <CommandEmpty>No club found.</CommandEmpty>
+                        <CommandGroup heading="Clubs">
+                          {allClubs.map((club) => (
+                            <CommandItem
+                              key={club}
+                              value={club}
+                              onSelect={(value) => handleSelectClub(club)}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  selectedClubs.includes(club) ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {club}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                        <CommandGroup heading="Custom">
+                          <CommandItem
+                            value="other-enter-manually"
+                            onSelect={() => handleSelectClub('__other__')}
+                            className="text-muted-foreground"
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Other (enter manually)
+                          </CommandItem>
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+
+                {/* Other club input */}
+                {showOtherInput && (
+                  <div className="flex gap-2 mt-2">
+                    <Input
+                      placeholder="Enter club name"
+                      value={otherClub}
+                      onChange={(e) => setOtherClub(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddOtherClub())}
+                      autoFocus
+                    />
+                    <Button type="button" variant="outline" onClick={handleAddOtherClub}>
+                      Add
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        setShowOtherInput(false);
+                        setOtherClub('');
+                      }}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
+
+                {/* Selected clubs */}
+                {selectedClubs.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
-                    {clubs.map((club) => (
+                    {selectedClubs.map((club) => (
                       <Badge key={club} variant="secondary" className="flex items-center gap-1">
                         {club}
                         <X

@@ -6,7 +6,8 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { getProfileImageUrl } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import {
@@ -146,6 +147,7 @@ const Favorites = () => {
                       >
                         <div className="flex items-center gap-3">
                           <Avatar className="w-8 h-8">
+                            <AvatarImage src={getProfileImageUrl(p.profile_image_url)} />
                             <AvatarFallback className="bg-emerald-100 text-emerald-700 text-xs">
                               {getInitials(p.name)}
                             </AvatarFallback>
@@ -207,6 +209,7 @@ const Favorites = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <Avatar>
+                        <AvatarImage src={getProfileImageUrl(fav.profile_image_url)} />
                         <AvatarFallback className="bg-emerald-100 text-emerald-700">
                           {getInitials(fav.name)}
                         </AvatarFallback>

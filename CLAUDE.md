@@ -48,7 +48,6 @@ uvicorn server:app --reload --host 0.0.0.0 --port 8000
 ### Environment Variables
 Copy `.env.example` to `.env` and configure:
 - `JWT_SECRET` - Secret key for JWT tokens (change in production)
-- `FIRECRAWL_API_KEY` - Optional, for PTI scraping feature
 
 Docker-compose sets these automatically:
 - `MONGO_URL` - MongoDB connection string

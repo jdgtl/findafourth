@@ -9,8 +9,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Home, Users, Star, User, Menu, LogOut } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { getProfileImageUrl } from '@/lib/utils';
+import { Home, Users, Star, User, Building2, LogOut } from 'lucide-react';
 
 const AppLayout = ({ children }) => {
   const { player, logout } = useAuth();
@@ -24,6 +25,7 @@ const AppLayout = ({ children }) => {
 
   const navItems = [
     { path: '/home', icon: Home, label: 'Home' },
+    { path: '/clubs', icon: Building2, label: 'Clubs' },
     { path: '/crews', icon: Users, label: 'Crews' },
     { path: '/favorites', icon: Star, label: 'Favorites' },
     { path: '/profile', icon: User, label: 'Profile' },
@@ -69,11 +71,12 @@ const AppLayout = ({ children }) => {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="flex items-center gap-2">
                   <Avatar className="w-8 h-8">
+                    <AvatarImage src={getProfileImageUrl(player?.profile_image_url)} />
                     <AvatarFallback className="bg-emerald-600 text-white text-sm">
                       {getInitials(player?.name)}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="hidden md:inline text-sm font-medium">
+                  <span className="text-sm font-medium">
                     {player?.name || 'Player'}
                   </span>
                 </Button>

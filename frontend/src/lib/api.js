@@ -55,6 +55,14 @@ export const playerAPI = {
     });
   },
   deleteProfileImage: (id) => api.delete(`/players/${id}/profile-image`),
+  getMatchHistory: (id) => api.get(`/players/${id}/match-history`),
+  getPartnerChemistry: (id) => api.get(`/players/${id}/partner-chemistry`),
+};
+
+// Tenniscores Admin APIs
+export const tenniscoresAPI = {
+  scrapeRankings: () => api.post('/admin/tenniscores/scrape-rankings'),
+  scrapePlayer: (playerName) => api.post(`/admin/tenniscores/scrape-player/${encodeURIComponent(playerName)}`),
 };
 
 // Request APIs
@@ -78,8 +86,6 @@ export const crewAPI = {
   delete: (id) => api.delete(`/crews/${id}`),
   addMember: (crewId, playerId) => api.post(`/crews/${crewId}/members?player_id=${playerId}`),
   removeMember: (crewId, playerId) => api.delete(`/crews/${crewId}/members/${playerId}`),
-  join: (id) => api.post(`/crews/${id}/join`),
-  leave: (id) => api.post(`/crews/${id}/leave`),
 };
 
 // Favorite APIs
@@ -100,6 +106,8 @@ export const availabilityAPI = {
 export const clubAPI = {
   list: (params) => api.get('/clubs', { params }),
   get: (id) => api.get(`/clubs/${id}`),
+  getNames: () => api.get('/clubs/names'),
+  getWithDetails: () => api.get('/clubs/with-details'),
   getSuggestions: () => api.get('/clubs/suggestions'),
 };
 

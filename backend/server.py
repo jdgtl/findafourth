@@ -17,7 +17,6 @@ from datetime import datetime, timezone, timedelta
 import bcrypt
 import jwt
 import httpx
-from firecrawl import FirecrawlApp
 from bs4 import BeautifulSoup
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -35,9 +34,6 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'findafourth-secret-key-change-in-prod
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24 * 7  # 7 days
 
-# Firecrawl Configuration
-FIRECRAWL_API_KEY = os.environ.get('FIRECRAWL_API_KEY', '')
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -47,6 +43,52 @@ logger = logging.getLogger(__name__)
 
 # Scheduler for automated tasks
 scheduler = AsyncIOScheduler()
+
+def normalize_club_name(team_name: str) -> str:
+    """
+    Extract the base club name from a team name.
+    Handles various patterns:
+    - "Cape Ann 1" -> "Cape Ann"
+    - "Cape Ann Cage Fighters" -> "Cape Ann"
+    - "Myopia Gold" -> "Myopia"
+    - "TCC 1" -> "The Country Club"
+    """
+    import re
+
+    name = team_name.strip()
+
+    # Step 1: Strip trailing numbers FIRST (e.g., "Needham PTC 1" -> "Needham PTC")
+    name = re.sub(r'\s+\d+\s*$', '', name)
+
+    # Step 2: Check explicit mappings for abbreviations and special cases
+    explicit_mappings = {
+        "TCC": "The Country Club",
+        "Needham PTC": "Needham",
+        "Needham Platform Tennis Club": "Needham",
+        "Belmont Hill Club": "Belmont Hill",
+    }
+
+    if name in explicit_mappings:
+        return explicit_mappings[name]
+
+    # Step 3: Pattern-based normalization rules
+    pattern_rules = [
+        # Cape Ann variants
+        (r".*Cape Ann.*", "Cape Ann"),
+        # Myopia variants (Gold, Red, etc.)
+        (r"^Myopia\s+\w+$", "Myopia"),
+        # Essex variants (2M, 2T, etc.)
+        (r"^Essex\s+\d+\w*$", "Essex"),
+        # North Andover variants (2A, 2B, etc.)
+        (r"^North Andover\s+\d+\w*$", "North Andover"),
+    ]
+
+    for pattern, club_name in pattern_rules:
+        if re.match(pattern, name, re.IGNORECASE):
+            return club_name
+
+    return name
+
 
 async def run_gbpta_full_sync():
     """
@@ -154,7 +196,7 @@ async def run_gbpta_full_sync():
                                             'player_name': player_name,
                                             'pti_value': pti_value,
                                             'profile_source_url': profile_url,
-                                            'club': club['name']
+                                            'club': normalize_club_name(club['name'])
                                         })
                 except Exception as e:
                     logger.error(f"Error scraping {club['name']}: {e}")
@@ -272,7 +314,7 @@ class PlayerBase(BaseModel):
     phone: Optional[str] = None
     home_club: Optional[str] = None
     other_clubs: List[str] = []
-    pti: Optional[int] = None
+    pti: Optional[float] = None
     notify_push: bool = True
     notify_sms: bool = False
     notify_email: bool = True
@@ -286,7 +328,7 @@ class PlayerProfile(BaseModel):
     name: str
     home_club: str
     other_clubs: List[str] = []
-    pti: Optional[int] = None
+    pti: Optional[float] = None
     pti_verified: Optional[bool] = False
     phone: Optional[str] = None
 
@@ -295,7 +337,7 @@ class PlayerUpdate(BaseModel):
     phone: Optional[str] = None
     home_club: Optional[str] = None
     other_clubs: Optional[List[str]] = None
-    pti: Optional[int] = None
+    pti: Optional[float] = None
     profile_image_url: Optional[str] = None
     notify_push: Optional[bool] = None
     notify_sms: Optional[bool] = None
@@ -309,7 +351,7 @@ class Player(BaseModel):
     phone: Optional[str] = None
     home_club: Optional[str] = None
     other_clubs: List[str] = []
-    pti: Optional[int] = None
+    pti: Optional[float] = None
     pti_verified: bool = False  # True if PTI was matched from scraped roster
     profile_image_url: Optional[str] = None  # User-uploaded or scraped profile image
     notify_push: bool = True
@@ -325,7 +367,7 @@ class PlayerPublic(BaseModel):
     name: Optional[str]
     home_club: Optional[str]
     other_clubs: List[str]
-    pti: Optional[int]
+    pti: Optional[float]
     pti_verified: bool = False
     profile_image_url: Optional[str] = None
 
@@ -342,7 +384,6 @@ class TokenResponse(BaseModel):
 # Crew Models
 class CrewCreate(BaseModel):
     name: str
-    type: str = "invite_only"  # open, invite_only
 
 class CrewUpdate(BaseModel):
     name: Optional[str] = None
@@ -472,10 +513,6 @@ class PTIHistory(BaseModel):
 
 class PTIImportRequest(BaseModel):
     players: List[dict]  # List of {player_name, pti_value, source_url?}
-
-class PTIScrapeRequest(BaseModel):
-    urls: List[str]
-    prompt: Optional[str] = None
 
 # Target leagues for GBPTA scraping
 GBPTA_TARGET_LEAGUES = [
@@ -786,21 +823,18 @@ async def delete_player(player_id: str, current_player: dict = Depends(get_curre
 
 @api_router.get("/crews")
 async def list_crews(current_player: dict = Depends(get_current_player)):
-    # Get crews the player is a member of
-    memberships = await db.crew_members.find({"player_id": current_player['id']}).to_list(1000)
-    crew_ids = [m['crew_id'] for m in memberships]
-    
-    # Get all crews (for open crews discovery)
-    all_crews = await db.crews.find({}, {"_id": 0}).to_list(1000)
-    
-    # Add member count and membership status to each crew
-    for crew in all_crews:
+    # Crews are private - only return crews created by this player
+    my_crews = await db.crews.find(
+        {"created_by": current_player['id']},
+        {"_id": 0}
+    ).to_list(1000)
+
+    # Add member count to each crew
+    for crew in my_crews:
         members = await db.crew_members.find({"crew_id": crew['id']}).to_list(1000)
         crew['member_count'] = len(members)
-        crew['is_member'] = crew['id'] in crew_ids
-        crew['is_creator'] = crew['created_by'] == current_player['id']
-    
-    return all_crews
+
+    return my_crews
 
 @api_router.post("/crews")
 async def create_crew(data: CrewCreate, current_player: dict = Depends(get_current_player)):
@@ -809,27 +843,15 @@ async def create_crew(data: CrewCreate, current_player: dict = Depends(get_curre
         "id": crew_id,
         "name": data.name,
         "created_by": current_player['id'],
-        "type": data.type,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
-    
+
     await db.crews.insert_one(crew_doc)
-    
-    # Add creator as a member
-    member_doc = {
-        "crew_id": crew_id,
-        "player_id": current_player['id'],
-        "joined_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.crew_members.insert_one(member_doc)
-    
+
     # Remove _id from response
     crew_doc.pop('_id', None)
-    
-    crew_doc['member_count'] = 1
-    crew_doc['is_member'] = True
-    crew_doc['is_creator'] = True
-    
+    crew_doc['member_count'] = 0
+
     return crew_doc
 
 @api_router.get("/crews/{crew_id}")
@@ -837,21 +859,23 @@ async def get_crew(crew_id: str, current_player: dict = Depends(get_current_play
     crew = await db.crews.find_one({"id": crew_id}, {"_id": 0})
     if not crew:
         raise HTTPException(status_code=404, detail="Crew not found")
-    
+
+    # Crews are private - only creator can view
+    if crew['created_by'] != current_player['id']:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
     # Get members with player details
     members = await db.crew_members.find({"crew_id": crew_id}).to_list(1000)
     member_ids = [m['player_id'] for m in members]
-    
+
     players = await db.players.find(
         {"id": {"$in": member_ids}},
         {"_id": 0, "password_hash": 0}
     ).to_list(1000)
-    
+
     crew['members'] = players
     crew['member_count'] = len(players)
-    crew['is_member'] = current_player['id'] in member_ids
-    crew['is_creator'] = crew['created_by'] == current_player['id']
-    
+
     return crew
 
 @api_router.put("/crews/{crew_id}")
@@ -929,42 +953,6 @@ async def remove_crew_member(crew_id: str, player_id: str, current_player: dict 
     await db.crew_members.delete_one({"crew_id": crew_id, "player_id": player_id})
     
     return {"message": "Member removed successfully"}
-
-@api_router.post("/crews/{crew_id}/join")
-async def join_crew(crew_id: str, current_player: dict = Depends(get_current_player)):
-    crew = await db.crews.find_one({"id": crew_id})
-    if not crew:
-        raise HTTPException(status_code=404, detail="Crew not found")
-    
-    if crew['type'] != 'open':
-        raise HTTPException(status_code=403, detail="This crew is invite only")
-    
-    # Check if already a member
-    existing = await db.crew_members.find_one({"crew_id": crew_id, "player_id": current_player['id']})
-    if existing:
-        raise HTTPException(status_code=400, detail="Already a member")
-    
-    member_doc = {
-        "crew_id": crew_id,
-        "player_id": current_player['id'],
-        "joined_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.crew_members.insert_one(member_doc)
-    
-    return {"message": "Joined crew successfully"}
-
-@api_router.post("/crews/{crew_id}/leave")
-async def leave_crew(crew_id: str, current_player: dict = Depends(get_current_player)):
-    crew = await db.crews.find_one({"id": crew_id})
-    if not crew:
-        raise HTTPException(status_code=404, detail="Crew not found")
-    
-    if crew['created_by'] == current_player['id']:
-        raise HTTPException(status_code=400, detail="Creator cannot leave crew. Delete it instead.")
-    
-    await db.crew_members.delete_one({"crew_id": crew_id, "player_id": current_player['id']})
-    
-    return {"message": "Left crew successfully"}
 
 # ==================== FAVORITES ROUTES ====================
 
@@ -1617,6 +1605,7 @@ async def get_pti_history(
     Get PTI history for a player.
     Used for displaying PTI trend graph on profile page.
     Returns historical PTI values sorted by date (oldest first).
+    Deduplicates by date to show only one entry per day.
     """
     # Normalize the player name for matching
     normalized_name = normalize_name(player_name)
@@ -1625,10 +1614,23 @@ async def get_pti_history(
         raise HTTPException(status_code=400, detail="Player name is required")
 
     # Find history records for this player
-    history = await db.pti_history.find(
+    all_history = await db.pti_history.find(
         {"player_name": normalized_name},
         {"_id": 0, "pti_value": 1, "recorded_at": 1}
-    ).sort("recorded_at", 1).limit(limit).to_list(limit)
+    ).sort("recorded_at", 1).to_list(500)
+
+    # Deduplicate by date (keep first entry per day)
+    seen_dates = set()
+    history = []
+    for entry in all_history:
+        recorded_at = entry.get('recorded_at', '')
+        # Extract just the date part (YYYY-MM-DD)
+        date_only = recorded_at[:10] if recorded_at else ''
+        if date_only and date_only not in seen_dates:
+            seen_dates.add(date_only)
+            history.append(entry)
+            if len(history) >= limit:
+                break
 
     # Get current PTI from roster if available
     current_entry = await db.pti_roster.find_one(
@@ -1705,107 +1707,28 @@ async def import_pti_roster(data: PTIImportRequest, current_player: dict = Depen
     }
 
 @api_router.post("/admin/pti-roster/scrape")
-async def scrape_pti_roster(data: PTIScrapeRequest, current_player: dict = Depends(get_current_player)):
-    """Scrape PTI roster data from paddlescores.com using Firecrawl agent"""
-    if not FIRECRAWL_API_KEY:
-        raise HTTPException(status_code=500, detail="Firecrawl API key not configured")
-    
-    if not data.urls:
-        raise HTTPException(status_code=400, detail="No URLs provided")
-    
+async def scrape_pti_roster(current_player: dict = Depends(get_current_player)):
+    """
+    Scrape PTI roster data from GBPTA paddlescores.com.
+    This triggers the full sync pipeline: scrape clubs, scrape rosters, deduplicate, record history.
+    """
     try:
-        # Initialize Firecrawl
-        app = FirecrawlApp(api_key=FIRECRAWL_API_KEY)
-        
-        # Build the prompt for extracting player data
-        urls_list = "\n".join([f"- {url}" for url in data.urls])
-        default_prompt = f"""Extract player names and their associated PTI values (from the 'R' column) from the table with class 'team_roster_table' from the provided Cape Ann Paddle Team URLs. For each player, also extract the 'href' attribute from the link within their name cell that has the class 'lightbox-auto'. Do not include captain designations.
+        result = await run_gbpta_full_sync()
 
-Target URLs:
-{urls_list}"""
-        
-        prompt = data.prompt if data.prompt else default_prompt
-        
-        # Define the schema for extraction
-        class ExtractSchema(BaseModel):
-            cape_ann_paddle_team_roster: List[dict]
-        
-        # Run the Firecrawl agent
-        result = app.agent(
-            schema=ExtractSchema,
-            prompt=prompt,
-        )
-        
-        # Process the result - Firecrawl returns result with data attribute
-        roster_data = []
-        if hasattr(result, 'data') and result.data:
-            roster_data = result.data.get('cape_ann_paddle_team_roster', [])
-        elif isinstance(result, dict):
-            roster_data = result.get('cape_ann_paddle_team_roster', [])
-            if not roster_data and 'data' in result:
-                roster_data = result['data'].get('cape_ann_paddle_team_roster', [])
-        elif hasattr(result, 'cape_ann_paddle_team_roster'):
-            roster_data = result.cape_ann_paddle_team_roster
-        
-        if not roster_data:
-            return {
-                "message": "Scrape completed but no player data found",
-                "raw_result": str(result)[:500]  # Include truncated raw result for debugging
-            }
-        
-        # Process and deduplicate the scraped data
-        # Handle both field name formats: (name, pti) and (player_name, pti_value)
-        processed_players = []
-        for p in roster_data:
-            # Try both field name formats
-            player_name = (p.get('player_name') or p.get('name') or '').strip()
-            pti_value = p.get('pti_value') if p.get('pti_value') is not None else p.get('pti')
-            
-            if not player_name:
-                continue
-            
-            if pti_value is not None:
-                try:
-                    pti_value = float(pti_value)
-                except (ValueError, TypeError):
-                    pti_value = None
-            
-            processed_players.append({
-                'player_name': player_name,
-                'pti_value': pti_value,
-                'source_url': p.get('player_name_url') or p.get('href') or p.get('profile_initial_url') or None
-            })
-        
-        # Deduplicate
-        deduped_players = dedupe_pti_players(processed_players)
-        
-        # Clear existing roster and insert new data
-        await db.pti_roster.delete_many({})
-        
-        now = datetime.now(timezone.utc).isoformat()
-        roster_docs = []
-        for p in deduped_players:
-            doc = {
-                "id": str(uuid.uuid4()),
-                "player_name": p['player_name'],
-                "pti_value": p['pti_value'],
-                "source_url": p.get('source_url'),
-                "scraped_at": now
-            }
-            roster_docs.append(doc)
-        
-        if roster_docs:
-            await db.pti_roster.insert_many(roster_docs)
-        
+        # Get counts from database for response
+        clubs_count = await db.clubs.count_documents({})
+        players_count = await db.pti_roster.count_documents({})
+        unique_clubs = await db.pti_roster.distinct('clubs')
+
         return {
-            "message": "PTI roster scraped and imported successfully",
-            "total_scraped": len(roster_data),
-            "total_after_dedup": len(roster_docs),
-            "duplicates_removed": len(roster_data) - len(roster_docs)
+            "message": "GBPTA roster scraped and imported successfully",
+            "clubs_scraped": clubs_count,
+            "players_after_dedup": players_count,
+            "unique_club_names": len(unique_clubs)
         }
-        
+
     except Exception as e:
-        logger.error(f"Firecrawl scraping error: {str(e)}")
+        logger.error(f"GBPTA scraping error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Scraping failed: {str(e)}")
 
 @api_router.post("/admin/pti-roster/sync-players")
@@ -2432,6 +2355,401 @@ async def record_pti_history(current_player: dict = Depends(get_current_player))
         logger.error(f"Error recording PTI history: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to record PTI history: {str(e)}")
 
+
+# ==================== TENNISCORES INTEGRATION ====================
+
+TENNISCORES_BASE_URL = "https://gbptl.tenniscores.com"
+TENNISCORES_RANKINGS_URL = f"{TENNISCORES_BASE_URL}/?mod=nndz-SkhmOW1PQ3V4Zz09"
+
+
+def parse_tenniscores_rankings(html: str) -> List[dict]:
+    """
+    Parse the Tenniscores rankings page to extract all players.
+    Returns list of players with name, pti_start, pti_diff, pti_current, profile_url.
+    """
+    soup = BeautifulSoup(html, 'html.parser')
+    players = []
+
+    # Find the main table with player data
+    tables = soup.find_all('table')
+    for table in tables:
+        rows = table.find_all('tr')
+        for row in rows:
+            cells = row.find_all(['td', 'th'])
+            if len(cells) >= 5:
+                # Check if this looks like a player row (has a link in last name column)
+                link = cells[1].find('a') if len(cells) > 1 else None
+                if link and 'uid=' in link.get('href', ''):
+                    try:
+                        first_name = cells[0].get_text(strip=True)
+                        last_name = cells[1].get_text(strip=True)
+                        profile_url = link.get('href', '')
+                        if not profile_url.startswith('http'):
+                            profile_url = f"{TENNISCORES_BASE_URL}/{profile_url}"
+
+                        # Parse PTI values
+                        pti_start_text = cells[2].get_text(strip=True) if len(cells) > 2 else ''
+                        pti_diff_text = cells[3].get_text(strip=True) if len(cells) > 3 else ''
+                        pti_current_text = cells[4].get_text(strip=True) if len(cells) > 4 else ''
+
+                        pti_start = float(pti_start_text) if pti_start_text else None
+                        pti_diff = float(pti_diff_text) if pti_diff_text else None
+                        pti_current = float(pti_current_text) if pti_current_text else None
+
+                        # Extract uid from profile URL
+                        uid_match = profile_url.split('uid=')[-1] if 'uid=' in profile_url else None
+
+                        players.append({
+                            'first_name': first_name,
+                            'last_name': last_name,
+                            'name': f"{first_name} {last_name}".strip(),
+                            'pti_start': pti_start,
+                            'pti_diff': pti_diff,
+                            'pti_current': pti_current,
+                            'profile_url': profile_url,
+                            'tenniscores_uid': uid_match
+                        })
+                    except (ValueError, AttributeError) as e:
+                        continue
+
+    return players
+
+
+def parse_tenniscores_player_page(html: str, player_name: str) -> dict:
+    """
+    Parse a Tenniscores player page to extract match history and partner stats.
+    """
+    soup = BeautifulSoup(html, 'html.parser')
+
+    result = {
+        'player_name': player_name,
+        'current_pti': None,
+        'matches': [],
+        'partner_stats': []
+    }
+
+    # Try to find current PTI
+    pti_elements = soup.find_all(string=lambda text: text and 'PTI' in text if text else False)
+    for elem in pti_elements:
+        parent = elem.parent
+        if parent:
+            text = parent.get_text()
+            # Look for pattern like "Current PTI: 35.1" or just a number near PTI
+            import re
+            pti_match = re.search(r'[-]?\d+\.?\d*', text)
+            if pti_match:
+                try:
+                    result['current_pti'] = float(pti_match.group())
+                    break
+                except ValueError:
+                    pass
+
+    # Find match history table(s)
+    # Matches typically have: W/L, Date, League, Partner, Opponents, Scores
+    tables = soup.find_all('table')
+    for table in tables:
+        rows = table.find_all('tr')
+        for row in rows:
+            cells = row.find_all('td')
+            if len(cells) >= 4:
+                # Try to identify match rows
+                first_cell_text = cells[0].get_text(strip=True).upper()
+                if first_cell_text in ['W', 'L', 'WIN', 'LOSS']:
+                    try:
+                        match_data = {
+                            'result': 'W' if 'W' in first_cell_text else 'L',
+                            'date': cells[1].get_text(strip=True) if len(cells) > 1 else '',
+                            'raw_data': [c.get_text(strip=True) for c in cells]
+                        }
+
+                        # Try to extract partner and opponents from links
+                        links = row.find_all('a')
+                        player_names = []
+                        for link in links:
+                            name = link.get_text(strip=True)
+                            if name and name != player_name:
+                                player_names.append(name)
+
+                        if player_names:
+                            match_data['partner'] = player_names[0] if len(player_names) >= 1 else None
+                            match_data['opponents'] = player_names[1:3] if len(player_names) > 1 else []
+
+                        result['matches'].append(match_data)
+                    except Exception:
+                        continue
+
+    return result
+
+
+def calculate_partner_stats(matches: List[dict], player_name: str) -> List[dict]:
+    """
+    Calculate partner chemistry stats from match history.
+    Returns list of partners with win rate, matches played, etc.
+    """
+    partner_data = {}
+
+    for match in matches:
+        partner = match.get('partner')
+        if not partner:
+            continue
+
+        if partner not in partner_data:
+            partner_data[partner] = {
+                'partner_name': partner,
+                'matches_played': 0,
+                'wins': 0,
+                'losses': 0
+            }
+
+        partner_data[partner]['matches_played'] += 1
+        if match.get('result') == 'W':
+            partner_data[partner]['wins'] += 1
+        else:
+            partner_data[partner]['losses'] += 1
+
+    # Calculate win rates and sort by matches played
+    partner_stats = []
+    for partner, stats in partner_data.items():
+        stats['win_rate'] = round(stats['wins'] / stats['matches_played'] * 100, 1) if stats['matches_played'] > 0 else 0
+        partner_stats.append(stats)
+
+    partner_stats.sort(key=lambda x: x['matches_played'], reverse=True)
+    return partner_stats
+
+
+@api_router.post("/admin/tenniscores/scrape-rankings")
+async def scrape_tenniscores_rankings(current_player: dict = Depends(get_current_player)):
+    """
+    Scrape the Tenniscores rankings page to get all players with current PTI.
+    Updates the tenniscores_players collection.
+    """
+    try:
+        logger.info("Scraping Tenniscores rankings page...")
+        html = await fetch_html(TENNISCORES_RANKINGS_URL)
+
+        players = parse_tenniscores_rankings(html)
+        logger.info(f"Found {len(players)} players on Tenniscores")
+
+        if not players:
+            return {"message": "No players found", "count": 0}
+
+        # Update tenniscores_players collection
+        now = datetime.now(timezone.utc).isoformat()
+        inserted = 0
+        updated = 0
+
+        for player in players:
+            player['last_scraped'] = now
+            player['normalized_name'] = normalize_name(player['name'])
+
+            existing = await db.tenniscores_players.find_one({
+                'normalized_name': player['normalized_name']
+            })
+
+            if existing:
+                await db.tenniscores_players.update_one(
+                    {'_id': existing['_id']},
+                    {'$set': player}
+                )
+                updated += 1
+            else:
+                player['id'] = str(uuid.uuid4())
+                player['created_at'] = now
+                await db.tenniscores_players.insert_one(player)
+                inserted += 1
+
+        # Also update PTI values in pti_roster for matching players
+        pti_updated = 0
+        for player in players:
+            if player['pti_current'] is not None:
+                result = await db.pti_roster.update_many(
+                    {'normalized_name': player['normalized_name']},
+                    {'$set': {'pti_value': player['pti_current'], 'pti_updated': now}}
+                )
+                pti_updated += result.modified_count
+
+        return {
+            "message": "Tenniscores rankings scraped successfully",
+            "total_found": len(players),
+            "inserted": inserted,
+            "updated": updated,
+            "pti_roster_updated": pti_updated
+        }
+
+    except Exception as e:
+        logger.error(f"Error scraping Tenniscores rankings: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/admin/tenniscores/scrape-player/{player_name}")
+async def scrape_tenniscores_player(
+    player_name: str,
+    current_player: dict = Depends(get_current_player)
+):
+    """
+    Scrape a specific player's Tenniscores page to get their match history.
+    """
+    try:
+        # Find the player in tenniscores_players
+        normalized = normalize_name(player_name)
+        ts_player = await db.tenniscores_players.find_one({'normalized_name': normalized})
+
+        if not ts_player or not ts_player.get('profile_url'):
+            raise HTTPException(status_code=404, detail="Player not found in Tenniscores data. Run rankings scrape first.")
+
+        logger.info(f"Scraping Tenniscores player page for {player_name}...")
+        html = await fetch_html(ts_player['profile_url'])
+
+        player_data = parse_tenniscores_player_page(html, player_name)
+        partner_stats = calculate_partner_stats(player_data['matches'], player_name)
+
+        # Store match history
+        now = datetime.now(timezone.utc).isoformat()
+
+        await db.match_history.update_one(
+            {'normalized_name': normalized},
+            {
+                '$set': {
+                    'player_name': player_name,
+                    'normalized_name': normalized,
+                    'current_pti': player_data['current_pti'],
+                    'matches': player_data['matches'],
+                    'match_count': len(player_data['matches']),
+                    'last_scraped': now
+                }
+            },
+            upsert=True
+        )
+
+        # Store partner stats
+        await db.partner_stats.update_one(
+            {'normalized_name': normalized},
+            {
+                '$set': {
+                    'player_name': player_name,
+                    'normalized_name': normalized,
+                    'partners': partner_stats,
+                    'last_calculated': now
+                }
+            },
+            upsert=True
+        )
+
+        return {
+            "message": f"Player data scraped for {player_name}",
+            "matches_found": len(player_data['matches']),
+            "partners_found": len(partner_stats),
+            "current_pti": player_data['current_pti']
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error scraping Tenniscores player: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/players/{player_id}/match-history")
+async def get_player_match_history(
+    player_id: str,
+    current_player: dict = Depends(get_current_player)
+):
+    """
+    Get a player's match history and partner stats.
+    """
+    # Get the player
+    player = await db.players.find_one({'id': player_id}, {'_id': 0, 'password_hash': 0})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    normalized = normalize_name(player.get('name', ''))
+
+    # Get match history
+    match_history = await db.match_history.find_one(
+        {'normalized_name': normalized},
+        {'_id': 0}
+    )
+
+    # Get partner stats
+    partner_stats = await db.partner_stats.find_one(
+        {'normalized_name': normalized},
+        {'_id': 0}
+    )
+
+    # Get PTI trend from tenniscores_players
+    ts_player = await db.tenniscores_players.find_one(
+        {'normalized_name': normalized},
+        {'_id': 0}
+    )
+
+    return {
+        "player": {
+            "id": player['id'],
+            "name": player.get('name'),
+            "pti": player.get('pti')
+        },
+        "match_history": match_history,
+        "partner_stats": partner_stats.get('partners', []) if partner_stats else [],
+        "pti_trend": {
+            "start": ts_player.get('pti_start') if ts_player else None,
+            "current": ts_player.get('pti_current') if ts_player else None,
+            "diff": ts_player.get('pti_diff') if ts_player else None
+        } if ts_player else None
+    }
+
+
+@api_router.get("/players/{player_id}/partner-chemistry")
+async def get_partner_chemistry(
+    player_id: str,
+    current_player: dict = Depends(get_current_player)
+):
+    """
+    Get a player's partner chemistry stats - who they play well with.
+    """
+    player = await db.players.find_one({'id': player_id}, {'_id': 0})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    normalized = normalize_name(player.get('name', ''))
+
+    partner_stats = await db.partner_stats.find_one(
+        {'normalized_name': normalized},
+        {'_id': 0}
+    )
+
+    if not partner_stats:
+        return {
+            "player_name": player.get('name'),
+            "partners": [],
+            "message": "No partner data available. Scrape player history first."
+        }
+
+    # Enrich partner data with registered player info
+    enriched_partners = []
+    for partner in partner_stats.get('partners', []):
+        partner_normalized = normalize_name(partner['partner_name'])
+
+        # Check if partner is registered
+        registered_partner = await db.players.find_one(
+            {'name': {'$regex': f'^{partner["partner_name"]}$', '$options': 'i'}, 'profile_complete': True},
+            {'_id': 0, 'id': 1, 'name': 1, 'profile_image_url': 1, 'pti': 1}
+        )
+
+        enriched_partners.append({
+            **partner,
+            'is_registered': registered_partner is not None,
+            'player_id': registered_partner.get('id') if registered_partner else None,
+            'profile_image_url': registered_partner.get('profile_image_url') if registered_partner else None,
+            'current_pti': registered_partner.get('pti') if registered_partner else None
+        })
+
+    return {
+        "player_name": player.get('name'),
+        "partners": enriched_partners,
+        "last_calculated": partner_stats.get('last_calculated')
+    }
+
+
 # ==================== UTILITY ROUTES ====================
 
 @api_router.get("/clubs")
@@ -2471,24 +2789,167 @@ async def list_clubs(
         "total": len(clubs)
     }
 
+@api_router.get("/clubs/names")
+async def get_club_names(current_player: dict = Depends(get_current_player)):
+    """Get unique normalized club names from pti_roster"""
+    # Get distinct clubs from pti_roster (these are normalized)
+    pti_clubs = await db.pti_roster.distinct("clubs")
+
+    # Also get clubs from registered players
+    home_clubs = await db.players.distinct("home_club")
+    other_clubs_nested = await db.players.distinct("other_clubs")
+
+    # Combine all clubs
+    all_clubs = set()
+    for club in pti_clubs:
+        if club:
+            all_clubs.add(club)
+    for club in home_clubs:
+        if club:
+            all_clubs.add(club)
+    for clubs in other_clubs_nested:
+        if isinstance(clubs, list):
+            for club in clubs:
+                if club:
+                    all_clubs.add(club)
+        elif clubs:
+            all_clubs.add(clubs)
+
+    return sorted(list(all_clubs))
+
+
+@api_router.get("/clubs/with-details")
+async def get_clubs_with_details(current_player: dict = Depends(get_current_player)):
+    """
+    Get unique normalized club names with league/division info.
+    Maps normalized club names to their league/division from the clubs collection.
+    """
+    # Get distinct clubs from pti_roster (these are normalized)
+    pti_clubs = await db.pti_roster.distinct("clubs")
+
+    # Also get clubs from registered players
+    home_clubs = await db.players.distinct("home_club")
+    other_clubs_nested = await db.players.distinct("other_clubs")
+
+    # Combine all clubs
+    all_club_names = set()
+    for club in pti_clubs:
+        if club:
+            all_club_names.add(club)
+    for club in home_clubs:
+        if club:
+            all_club_names.add(club)
+    for clubs in other_clubs_nested:
+        if isinstance(clubs, list):
+            for club in clubs:
+                if club:
+                    all_club_names.add(club)
+        elif clubs:
+            all_club_names.add(clubs)
+
+    # Get all team entries from clubs collection to map league/division
+    team_entries = await db.clubs.find({}, {"_id": 0, "name": 1, "league": 1, "division": 1}).to_list(1000)
+
+    # Build a mapping from club name prefix to league/division
+    # Team names like "Cape Ann 1" map to club "Cape Ann"
+    club_to_league = {}
+    club_to_divisions = {}
+    for team in team_entries:
+        team_name = team.get('name', '')
+        league = team.get('league', '')
+        division = team.get('division', '')
+
+        # For each normalized club name, check if team name starts with it
+        for club_name in all_club_names:
+            if team_name.startswith(club_name):
+                # Store league (should be same for all teams of a club)
+                if club_name not in club_to_league and league:
+                    club_to_league[club_name] = league
+                # Collect all divisions for this club
+                if division:
+                    if club_name not in club_to_divisions:
+                        club_to_divisions[club_name] = set()
+                    club_to_divisions[club_name].add(division)
+
+    # Build result list with member counts
+    result = []
+    for club_name in sorted(all_club_names):
+        # Count players in pti_roster with this club
+        member_count = await db.pti_roster.count_documents({"clubs": club_name})
+
+        # Count registered app users with this club
+        registered_count = await db.players.count_documents({
+            "profile_complete": True,
+            "$or": [
+                {"home_club": club_name},
+                {"other_clubs": club_name}
+            ]
+        })
+
+        club_obj = {
+            "name": club_name,
+            "league": club_to_league.get(club_name, ""),
+            "divisions": sorted(list(club_to_divisions.get(club_name, set()))),
+            "member_count": member_count,
+            "registered_count": registered_count
+        }
+        result.append(club_obj)
+
+    return result
+
 @api_router.get("/clubs/{club_id}")
 async def get_club(club_id: str, current_player: dict = Depends(get_current_player)):
     """
     Get club details with full roster.
     Returns both scraped players and registered app users.
+    Supports both team names (e.g., "Cape Ann 1") and normalized club names (e.g., "Cape Ann").
     """
-    # Find club by ID or name
+    decoded_id = club_id  # Already decoded by FastAPI
+
+    # First, try to find by team name in clubs collection
     club = await db.clubs.find_one(
-        {"$or": [{"id": club_id}, {"name": club_id}]},
+        {"$or": [{"id": decoded_id}, {"name": decoded_id}]},
         {"_id": 0}
     )
 
-    if not club:
-        raise HTTPException(status_code=404, detail="Club not found")
+    # If found in clubs collection (team entry), use that
+    if club:
+        club_name = club['name']
+    else:
+        # Try to find as a normalized club name in pti_roster
+        # Check if any player has this club in their clubs array
+        player_with_club = await db.pti_roster.find_one({"clubs": decoded_id})
+        if player_with_club:
+            # This is a normalized club name
+            club_name = decoded_id
+
+            # Find league/division from teams that start with this club name
+            team_entries = await db.clubs.find(
+                {},
+                {"_id": 0, "name": 1, "league": 1, "division": 1}
+            ).to_list(1000)
+
+            league = ""
+            divisions = set()
+            for team in team_entries:
+                if team.get('name', '').startswith(club_name):
+                    if not league and team.get('league'):
+                        league = team['league']
+                    if team.get('division'):
+                        divisions.add(team['division'])
+
+            # Construct a club object for normalized name
+            club = {
+                "name": club_name,
+                "league": league,
+                "division": ", ".join(sorted(divisions)) if divisions else ""
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Club not found")
 
     # Get all players from pti_roster who belong to this club
     roster_players = await db.pti_roster.find(
-        {"clubs": club['name']},
+        {"clubs": club_name},
         {"_id": 0}
     ).to_list(1000)
 
@@ -2497,8 +2958,8 @@ async def get_club(club_id: str, current_player: dict = Depends(get_current_play
         {
             "profile_complete": True,
             "$or": [
-                {"home_club": club['name']},
-                {"other_clubs": club['name']}
+                {"home_club": club_name},
+                {"other_clubs": club_name}
             ]
         },
         {"_id": 0, "password_hash": 0}
@@ -2547,7 +3008,7 @@ async def get_club_suggestions(current_player: dict = Depends(get_current_player
     # Get distinct clubs from players
     home_clubs = await db.players.distinct("home_club")
     other_clubs = await db.players.distinct("other_clubs")
-    
+
     # Combine and dedupe
     all_clubs = set()
     for club in home_clubs:
@@ -2560,7 +3021,7 @@ async def get_club_suggestions(current_player: dict = Depends(get_current_player
                     all_clubs.add(club)
         elif clubs:
             all_clubs.add(clubs)
-    
+
     # Add some common platform tennis clubs
     common_clubs = [
         "Paddle Club",

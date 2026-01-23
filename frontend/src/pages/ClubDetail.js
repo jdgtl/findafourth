@@ -9,13 +9,18 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   Building2,
   Users,
   UserCheck,
   ArrowLeft,
-  MapPin,
   Mail,
-  Trophy
+  MessageSquare,
 } from 'lucide-react';
 
 const ClubDetail = () => {
@@ -112,17 +117,9 @@ const ClubDetail = () => {
           >
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              {club?.name}
-            </h1>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <MapPin className="w-4 h-4" />
-              <span>{club?.league}</span>
-              <span>-</span>
-              <span>{club?.division}</span>
-            </div>
-          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            {club?.name}
+          </h1>
         </div>
 
         {/* Stats Card */}
@@ -160,7 +157,6 @@ const ClubDetail = () => {
                 <PlayerCard
                   key={idx}
                   player={player}
-                  onClick={() => navigate(`/players/${player.player_id}`)}
                   isRegistered
                 />
               ))}
@@ -190,7 +186,7 @@ const ClubDetail = () => {
   );
 };
 
-const PlayerCard = ({ player, onClick, isRegistered }) => {
+const PlayerCard = ({ player, isRegistered }) => {
   const getInitials = (name) => {
     return name
       .split(' ')
@@ -205,65 +201,111 @@ const PlayerCard = ({ player, onClick, isRegistered }) => {
     return pti.toFixed(1);
   };
 
+  const handleInviteEmail = (e) => {
+    e.stopPropagation();
+    // TODO: Implement email invite - will need to collect email
+    alert('Email invite coming soon! You\'ll be able to enter their email address.');
+  };
+
+  const handleInviteText = (e) => {
+    e.stopPropagation();
+    // TODO: Implement text invite - will need to collect phone
+    alert('Text invite coming soon! You\'ll be able to enter their phone number.');
+  };
+
   return (
-    <Card
-      className={`${
-        isRegistered ? 'cursor-pointer hover:shadow-md' : ''
-      } transition-shadow`}
-      onClick={isRegistered ? onClick : undefined}
-      data-testid="player-card"
-    >
-      <CardContent className="p-3">
+    <TooltipProvider>
+      <div
+        className="group p-3 rounded-[0.4rem] transition-all duration-500 ease-out
+          border border-transparent
+          hover:border-gray-300 hover:duration-300
+          dark:hover:border-gray-600"
+        data-testid="player-card"
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Avatar className="w-10 h-10">
+            <Avatar className="w-10 h-10 transition-all duration-300 opacity-80 group-hover:opacity-100">
               <AvatarImage src={getProfileImageUrl(player.profile_image_url)} />
-              <AvatarFallback className={isRegistered ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}>
+              <AvatarFallback className={`transition-colors duration-300 ${isRegistered ? 'bg-emerald-100/70 text-emerald-700 group-hover:bg-emerald-100' : 'bg-gray-100/70 text-gray-600 group-hover:bg-gray-100'}`}>
                 {getInitials(player.player_name)}
               </AvatarFallback>
             </Avatar>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-medium text-gray-900 dark:text-white">
+                <h3
+                  className="font-medium transition-all duration-300
+                    text-gray-600 dark:text-gray-400
+                    group-hover:text-gray-900 dark:group-hover:text-white"
+                  style={{
+                    textShadow: 'inset 1px 1px 1px rgba(255,255,255,0.8), inset -1px -1px 1px rgba(0,0,0,0.1)'
+                  }}
+                >
                   {player.player_name}
                 </h3>
                 {isRegistered && (
-                  <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-700">
+                  <Badge
+                    variant="secondary"
+                    className="text-xs bg-emerald-100/50 text-emerald-700/70 border-0
+                      transition-all duration-300
+                      group-hover:bg-emerald-100 group-hover:text-emerald-700"
+                  >
                     Member
                   </Badge>
                 )}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              <div className="flex items-center gap-1">
-                <Trophy className="w-4 h-4 text-amber-500" />
-                <span className="font-semibold text-gray-900 dark:text-white">
-                  {formatPTI(player.pti_value)}
-                </span>
-              </div>
-              <span className="text-xs text-gray-500">PTI</span>
-            </div>
+          <div className="flex items-center">
+            {/* Invite icons - only for non-registered */}
             {!isRegistered && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // TODO: Implement invite functionality
-                  alert('Invite feature coming soon!');
-                }}
-              >
-                <Mail className="w-3 h-3 mr-1" />
-                Invite
-              </Button>
+              <>
+                <div className="flex items-center gap-2 pr-3 opacity-50 group-hover:opacity-100 transition-opacity duration-300">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={handleInviteEmail}
+                        className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 group-hover:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                      >
+                        <Mail className="w-4 h-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Invite via email</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={handleInviteText}
+                        className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 group-hover:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Invite via text</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                {/* Pipe separator */}
+                <div className="h-8 w-px bg-gray-200/50 dark:bg-gray-600/50 mr-3 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors duration-300" />
+              </>
             )}
+            {/* PTI - always on far right */}
+            <div className="text-center min-w-[36px]">
+              <span
+                className="font-semibold leading-none transition-all duration-300
+                  text-gray-500 dark:text-gray-500
+                  group-hover:text-gray-900 dark:group-hover:text-white"
+              >
+                {formatPTI(player.pti_value)}
+              </span>
+              <span className="block text-[10px] text-gray-400 group-hover:text-gray-500 leading-tight mt-0.5 transition-colors duration-300">PTI</span>
+            </div>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </TooltipProvider>
   );
 };
 

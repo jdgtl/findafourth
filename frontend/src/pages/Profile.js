@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { playerAPI } from '@/lib/api';
+import { playerAPI, tenniscoresAPI } from '@/lib/api';
 import { getProfileImageUrl } from '@/lib/utils';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -24,8 +24,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Loader2, X, LogOut, Trash2, User, Bell, Eye, Shield, Camera } from 'lucide-react';
+import { Loader2, X, LogOut, Trash2, User, Bell, Eye, Shield, Camera, BadgeCheck } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import PTIHistoryChart from '@/components/PTIHistoryChart';
+import PartnerChemistry from '@/components/PartnerChemistry';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -309,19 +311,22 @@ const Profile = () => {
               <Label htmlFor="pti" className="flex items-center gap-2">
                 PTI Rating
                 {player?.pti_verified && (
-                  <Badge className="bg-emerald-100 text-emerald-700 text-xs">
-                    <Shield className="w-3 h-3 mr-1" />
-                    League Verified
-                  </Badge>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <BadgeCheck className="w-5 h-5 text-emerald-600 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="font-medium">GBPTA Verified</p>
+                        <p className="text-xs text-gray-400">Synced from official league data</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
               </Label>
               {player?.pti_verified ? (
                 <div className="flex items-center gap-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200">
                   <div className="text-2xl font-bold text-emerald-600">{player?.pti}</div>
-                  <div className="text-sm text-gray-600">
-                    <p>Official PTI Rating</p>
-                    <p className="text-xs text-gray-500">Updated weekly from league data</p>
-                  </div>
                 </div>
               ) : (
                 <Input
@@ -388,6 +393,11 @@ const Profile = () => {
         {/* PTI History Chart - only show for verified PTI users */}
         {player?.pti_verified && player?.name && (
           <PTIHistoryChart playerName={player.name} currentPti={player.pti} />
+        )}
+
+        {/* Partner Chemistry */}
+        {player?.id && player?.name && (
+          <PartnerChemistry playerId={player.id} playerName={player.name} />
         )}
 
         {/* Notification Preferences */}

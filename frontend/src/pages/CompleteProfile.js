@@ -144,7 +144,7 @@ const CompleteProfile = () => {
 
   const handleConfirmMatch = () => {
     if (ptiMatch) {
-      setPti(Math.round(ptiMatch.pti_value).toString());
+      setPti(ptiMatch.pti_value.toString());
       setPtiVerified(true);
 
       // Auto-populate clubs from the match
@@ -168,7 +168,7 @@ const CompleteProfile = () => {
 
   const handleSelectFromDropdown = (player) => {
     setName(player.player_name);
-    setPti(Math.round(player.pti_value).toString());
+    setPti(player.pti_value.toString());
     setPtiVerified(true);
 
     // Auto-populate clubs from the selected player
@@ -227,7 +227,7 @@ const CompleteProfile = () => {
         name: name.trim(),
         home_club: homeClub.trim(),
         other_clubs: otherClubs,
-        pti: pti ? parseInt(pti) : null,
+        pti: pti ? parseFloat(pti) : null,
         pti_verified: ptiVerified,
         phone: phone.trim() || null,
       });

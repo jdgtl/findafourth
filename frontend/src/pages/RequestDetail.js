@@ -6,7 +6,8 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { getProfileImageUrl } from '@/lib/utils';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -241,6 +242,7 @@ const RequestDetail = () => {
             {/* Organizer Info */}
             <div className="flex items-center gap-3 pt-2 border-t">
               <Avatar>
+                <AvatarImage src={getProfileImageUrl(request.organizer?.profile_image_url)} />
                 <AvatarFallback className="bg-emerald-100 text-emerald-700">
                   {getInitials(request.organizer?.name)}
                 </AvatarFallback>
@@ -313,6 +315,7 @@ const RequestDetail = () => {
                       >
                         <div className="flex items-center gap-3">
                           <Avatar>
+                            <AvatarImage src={getProfileImageUrl(response.player?.profile_image_url)} />
                             <AvatarFallback className="bg-emerald-100 text-emerald-700">
                               {getInitials(response.player?.name)}
                             </AvatarFallback>
@@ -350,6 +353,7 @@ const RequestDetail = () => {
                       >
                         <div className="flex items-center gap-3">
                           <Avatar>
+                            <AvatarImage src={getProfileImageUrl(response.player?.profile_image_url)} />
                             <AvatarFallback className="bg-amber-100 text-amber-700">
                               {getInitials(response.player?.name)}
                             </AvatarFallback>

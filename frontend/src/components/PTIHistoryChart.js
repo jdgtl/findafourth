@@ -229,9 +229,6 @@ const PTIHistoryChart = ({ playerName, currentPti }) => {
             </LineChart>
           </ResponsiveContainer>
         </div>
-        <p className="text-xs text-gray-500 text-center mt-2">
-          Lower PTI = Better ranking (like golf handicap)
-        </p>
       </CardContent>
     </Card>
   );
