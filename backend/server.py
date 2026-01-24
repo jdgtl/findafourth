@@ -21,6 +21,7 @@ from firecrawl import FirecrawlApp
 from bs4 import BeautifulSoup
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from notificationapi_python_server_sdk import notificationapi
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -37,6 +38,15 @@ JWT_EXPIRATION_HOURS = 24 * 7  # 7 days
 
 # Firecrawl Configuration
 FIRECRAWL_API_KEY = os.environ.get('FIRECRAWL_API_KEY', '')
+
+# NotificationAPI (Pingram.io) Configuration
+NOTIFICATIONAPI_CLIENT_ID = os.environ.get('NOTIFICATIONAPI_CLIENT_ID', '')
+NOTIFICATIONAPI_CLIENT_SECRET = os.environ.get('NOTIFICATIONAPI_CLIENT_SECRET', '')
+
+# Initialize NotificationAPI if credentials are provided
+if NOTIFICATIONAPI_CLIENT_ID and NOTIFICATIONAPI_CLIENT_SECRET:
+    notificationapi.init(NOTIFICATIONAPI_CLIENT_ID, NOTIFICATIONAPI_CLIENT_SECRET)
+    logger.info("NotificationAPI initialized successfully")
 
 # Configure logging
 logging.basicConfig(
@@ -540,28 +550,81 @@ def deserialize_datetime(value):
             return value
     return value
 
-# ==================== NOTIFICATION PLACEHOLDERS ====================
+# ==================== NOTIFICATION SYSTEM (Pingram.io / NotificationAPI) ====================
 
-async def send_push_notification(player_id: str, title: str, body: str):
-    """Placeholder for push notification - to be implemented"""
-    logger.info(f"[PUSH] To: {player_id}, Title: {title}, Body: {body}")
+async def send_notification(
+    notification_id: str,
+    player: dict,
+    merge_tags: dict = None
+):
+    """
+    Send a notification via NotificationAPI (Pingram.io).
+    Handles email, SMS, and web push based on player preferences and notification template config.
 
-async def send_email_notification(email: str, subject: str, body: str):
-    """Placeholder for email notification - to be implemented"""
-    logger.info(f"[EMAIL] To: {email}, Subject: {subject}, Body: {body}")
+    Args:
+        notification_id: The notification template ID configured in Pingram.io dashboard
+        player: Player dict with id, email, phone, and notification preferences
+        merge_tags: Template variables to merge into the notification
+    """
+    if not NOTIFICATIONAPI_CLIENT_ID or not NOTIFICATIONAPI_CLIENT_SECRET:
+        # Fall back to logging if NotificationAPI not configured
+        logger.info(f"[NOTIFICATION] {notification_id} to {player.get('email')}: {merge_tags}")
+        return
 
-async def send_sms_notification(phone: str, message: str):
-    """Placeholder for SMS notification (Twilio) - to be implemented"""
-    logger.info(f"[SMS] To: {phone}, Message: {message}")
+    try:
+        # Build the user object for NotificationAPI
+        user = {
+            "id": player['id'],
+            "email": player.get('email'),
+        }
 
-async def notify_player(player: dict, title: str, body: str):
-    """Send notifications based on player preferences"""
-    if player.get('notify_push'):
-        await send_push_notification(player['id'], title, body)
-    if player.get('notify_email'):
-        await send_email_notification(player['email'], title, body)
-    if player.get('notify_sms') and player.get('phone'):
-        await send_sms_notification(player['phone'], body)
+        # Add phone number if SMS notifications are enabled
+        if player.get('notify_sms') and player.get('phone'):
+            user["number"] = player['phone']
+
+        await notificationapi.send({
+            "notificationId": notification_id,
+            "user": user,
+            "mergeTags": merge_tags or {}
+        })
+
+        logger.info(f"[NOTIFICATION] Sent {notification_id} to {player.get('email')}")
+
+    except Exception as e:
+        logger.error(f"[NOTIFICATION ERROR] Failed to send {notification_id} to {player.get('email')}: {e}")
+
+
+async def notify_player(player: dict, title: str, body: str, notification_id: str = "general_notification"):
+    """
+    Send notifications to a player based on their preferences.
+    This is the main function called throughout the app.
+
+    Args:
+        player: Player dict with notification preferences
+        title: Notification title
+        body: Notification body/message
+        notification_id: NotificationAPI template ID (default: general_notification)
+    """
+    # Check if player wants any notifications
+    wants_notifications = (
+        player.get('notify_push') or
+        player.get('notify_email') or
+        player.get('notify_sms')
+    )
+
+    if not wants_notifications:
+        logger.debug(f"[NOTIFICATION] Skipped - player {player.get('email')} has all notifications disabled")
+        return
+
+    await send_notification(
+        notification_id=notification_id,
+        player=player,
+        merge_tags={
+            "title": title,
+            "body": body,
+            "playerName": player.get('name', 'Player')
+        }
+    )
 
 # ==================== AUTH ROUTES ====================
 
@@ -908,7 +971,12 @@ async def add_crew_member(crew_id: str, player_id: str, current_player: dict = D
     # Notify the added player
     player = await db.players.find_one({"id": player_id})
     if player:
-        await notify_player(player, "Added to Crew", f"You've been added to {crew['name']}")
+        await notify_player(
+            player,
+            "Added to Crew",
+            f"You've been added to {crew['name']}",
+            notification_id="added_to_crew"
+        )
     
     return {"message": "Member added successfully"}
 
@@ -1222,7 +1290,8 @@ async def notify_request_audience(request: dict, organizer: dict):
         await notify_player(
             player,
             f"{organizer.get('name', 'Someone')} needs players",
-            f"Need {request['spots_needed']} for {request['club']} at {time_str}"
+            f"Need {request['spots_needed']} for {request['club']} at {time_str}",
+            notification_id="new_game_request"
         )
 
 @api_router.get("/requests/{request_id}")
@@ -1306,7 +1375,8 @@ async def cancel_request(request_id: str, current_player: dict = Depends(get_cur
             await notify_player(
                 player,
                 "Game Cancelled",
-                f"The game at {request['club']} has been cancelled"
+                f"The game at {request['club']} has been cancelled",
+                notification_id="game_cancelled"
             )
     
     return {"message": "Request cancelled"}
@@ -1356,19 +1426,21 @@ async def respond_to_request(request_id: str, current_player: dict = Depends(get
             await notify_player(
                 organizer,
                 f"{current_player.get('name', 'Someone')} is in!",
-                f"Your {request['club']} game has {request['spots_needed'] - new_spots_filled} spot(s) left"
+                f"Your {request['club']} game has {request['spots_needed'] - new_spots_filled} spot(s) left",
+                notification_id="player_confirmed"
             )
     else:
         # Organizer picks mode - just mark as interested
         response_status = "interested"
-        
+
         # Notify organizer
         organizer = await db.players.find_one({"id": request['organizer_id']})
         if organizer:
             await notify_player(
                 organizer,
                 f"{current_player.get('name', 'Someone')} is interested",
-                f"New interest in your {request['club']} game"
+                f"New interest in your {request['club']} game",
+                notification_id="player_interested"
             )
     
     # Create response
@@ -1427,7 +1499,8 @@ async def update_response(
             await notify_player(
                 player,
                 "You're in!",
-                f"You've been confirmed for the {request['club']} game"
+                f"You've been confirmed for the {request['club']} game",
+                notification_id="you_confirmed"
             )
     
     elif old_status == 'confirmed' and new_status != 'confirmed':

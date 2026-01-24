@@ -49,11 +49,14 @@ uvicorn server:app --reload --host 0.0.0.0 --port 8000
 Copy `.env.example` to `.env` and configure:
 - `JWT_SECRET` - Secret key for JWT tokens (change in production)
 - `FIRECRAWL_API_KEY` - Optional, for PTI scraping feature
+- `NOTIFICATIONAPI_CLIENT_ID` - Pingram.io/NotificationAPI client ID
+- `NOTIFICATIONAPI_CLIENT_SECRET` - Pingram.io/NotificationAPI client secret
 
 Docker-compose sets these automatically:
 - `MONGO_URL` - MongoDB connection string
 - `DB_NAME` - Database name (default: findafourth)
 - `REACT_APP_BACKEND_URL` - Backend API URL
+- `REACT_APP_NOTIFICATIONAPI_CLIENT_ID` - Frontend notification client ID
 
 ## Architecture
 
@@ -62,7 +65,7 @@ Single-file FastAPI application containing:
 - Pydantic models for all entities (Player, Crew, GameRequest, etc.)
 - JWT auth helpers and middleware
 - All API routes under `/api` prefix
-- Notification placeholder functions (push, email, SMS)
+- Notification system via Pingram.io/NotificationAPI (email, SMS, web push)
 
 API route groups: `/api/auth/*`, `/api/players/*`, `/api/crews/*`, `/api/requests/*`, `/api/favorites/*`, `/api/availability/*`, `/api/pti/*`
 
@@ -81,6 +84,27 @@ API route groups: `/api/auth/*`, `/api/players/*`, `/api/crews/*`, `/api/request
 - `favorites` - Player favorite relationships
 - `availability_posts` - Player availability announcements
 - `responses` - Game request responses
+
+## Notification System
+
+The app uses Pingram.io (formerly NotificationAPI) for multi-channel notifications:
+- **Email**: Transactional emails for game requests, confirmations
+- **SMS**: Optional text notifications (requires phone number)
+- **Web Push**: Browser push notifications via service worker
+
+### Notification Templates (configure in Pingram.io dashboard)
+- `new_game_request` - Sent when a new game is posted to target audience
+- `player_interested` - Sent to organizer when someone expresses interest
+- `player_confirmed` - Sent to organizer when player auto-confirms (quick_fill mode)
+- `you_confirmed` - Sent to player when organizer confirms them
+- `game_cancelled` - Sent to confirmed players when game is cancelled
+- `added_to_crew` - Sent when player is added to a crew
+
+### Frontend Integration
+The `NotificationAPIProvider` in `App.js` handles:
+- Web push subscription registration
+- Service worker registration (`/notificationapi-service-worker.js`)
+- User identification for targeted notifications
 
 ## Known Issues & Patterns
 

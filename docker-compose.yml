@@ -28,6 +28,8 @@ services:
       - DB_NAME=findafourth
       - JWT_SECRET=${JWT_SECRET:-findafourth-dev-secret-change-in-production}
       - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY:-}
+      - NOTIFICATIONAPI_CLIENT_ID=${NOTIFICATIONAPI_CLIENT_ID:-}
+      - NOTIFICATIONAPI_CLIENT_SECRET=${NOTIFICATIONAPI_CLIENT_SECRET:-}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -45,6 +47,7 @@ services:
       - /app/node_modules
     environment:
       - REACT_APP_BACKEND_URL=http://localhost:8000
+      - REACT_APP_NOTIFICATIONAPI_CLIENT_ID=${NOTIFICATIONAPI_CLIENT_ID:-}
       - WATCHPACK_POLLING=true
       - CHOKIDAR_USEPOLLING=true
     depends_on:
