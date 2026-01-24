@@ -46,7 +46,7 @@ const AppLayout = ({ children }) => {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             <Link to="/home" className="flex items-center space-x-2">
-              <span className="text-xl font-bold text-emerald-600">NeedaFourth</span>
+              <span className="text-xl font-bold text-emerald-600">FindaFourth</span>
             </Link>
 
             {/* Desktop Nav */}

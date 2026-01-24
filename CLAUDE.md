@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-NeedaFourth is a mobile-first Progressive Web App (PWA) for platform tennis players to find additional players for matches. Players can create game requests specifying date, time, club, skill level (PTI rating), and fill mode. The app supports Crews (player groups) and Favorites for targeted requests.
+FindaFourth is a mobile-first Progressive Web App (PWA) for platform tennis players to find additional players for matches. Players can create game requests specifying date, time, club, skill level (PTI rating), and fill mode. The app supports Crews (player groups) and Favorites for targeted requests.
 
 ## Tech Stack
 
@@ -52,7 +52,7 @@ Copy `.env.example` to `.env` and configure:
 
 Docker-compose sets these automatically:
 - `MONGO_URL` - MongoDB connection string
-- `DB_NAME` - Database name (default: needafourth)
+- `DB_NAME` - Database name (default: findafourth)
 - `REACT_APP_BACKEND_URL` - Backend API URL
 
 ## Architecture

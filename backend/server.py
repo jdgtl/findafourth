@@ -28,10 +28,10 @@ load_dotenv(ROOT_DIR / '.env')
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ.get('DB_NAME', 'needafourth')]
+db = client[os.environ.get('DB_NAME', 'findafourth')]
 
 # JWT Configuration
-JWT_SECRET = os.environ.get('JWT_SECRET', 'needafourth-secret-key-change-in-production')
+JWT_SECRET = os.environ.get('JWT_SECRET', 'findafourth-secret-key-change-in-production')
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24 * 7  # 7 days
 
@@ -246,7 +246,7 @@ async def lifespan(app: FastAPI):
     logger.info("Scheduler stopped")
 
 # Create the main app with lifespan
-app = FastAPI(title="NeedaFourth API", lifespan=lifespan)
+app = FastAPI(title="FindaFourth API", lifespan=lifespan)
 
 # Uploads configuration
 UPLOADS_DIR = ROOT_DIR / "uploads"
@@ -2577,7 +2577,7 @@ async def get_club_suggestions(current_player: dict = Depends(get_current_player
 
 @api_router.get("/")
 async def root():
-    return {"message": "NeedaFourth API", "version": "1.0.0"}
+    return {"message": "FindaFourth API", "version": "1.0.0"}
 
 @api_router.get("/health")
 async def health_check():

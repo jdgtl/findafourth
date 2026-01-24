@@ -41,7 +41,7 @@ const Login = () => {
       <Card className="w-full max-w-md" data-testid="login-card">
         <CardHeader className="text-center">
           <Link to="/" className="text-2xl font-bold text-emerald-600 mb-2">
-            NeedaFourth
+            FindaFourth
           </Link>
           <CardTitle>Welcome Back</CardTitle>
           <CardDescription>Sign in to find your next match</CardDescription>

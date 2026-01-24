@@ -1,13 +1,13 @@
 services:
   mongodb:
     image: mongo:7
-    container_name: needafourth-mongo
+    container_name: findafourth-mongo
     ports:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
     environment:
-      - MONGO_INITDB_DATABASE=needafourth
+      - MONGO_INITDB_DATABASE=findafourth
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -18,15 +18,15 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: needafourth-backend
+    container_name: findafourth-backend
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
     environment:
       - MONGO_URL=mongodb://mongodb:27017
-      - DB_NAME=needafourth
-      - JWT_SECRET=${JWT_SECRET:-needafourth-dev-secret-change-in-production}
+      - DB_NAME=findafourth
+      - JWT_SECRET=${JWT_SECRET:-findafourth-dev-secret-change-in-production}
       - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY:-}
     depends_on:
       mongodb:
@@ -37,7 +37,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: needafourth-frontend
+    container_name: findafourth-frontend
     ports:
       - "3000:3000"
     volumes:

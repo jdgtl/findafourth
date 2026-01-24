@@ -50,7 +50,7 @@ const Signup = () => {
       <Card className="w-full max-w-md" data-testid="signup-card">
         <CardHeader className="text-center">
           <Link to="/" className="text-2xl font-bold text-emerald-600 mb-2">
-            NeedaFourth
+            FindaFourth
           </Link>
           <CardTitle>Create Account</CardTitle>
           <CardDescription>Join the platform tennis community</CardDescription>

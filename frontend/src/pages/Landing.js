@@ -9,7 +9,7 @@ const Landing = () => {
       {/* Hero Section */}
       <div className="container mx-auto px-4 py-12">
         <nav className="flex justify-between items-center mb-16">
-          <h1 className="text-2xl font-bold text-white">NeedaFourth</h1>
+          <h1 className="text-2xl font-bold text-white">FindaFourth</h1>
           <div className="space-x-4">
             <Link to="/login">
               <Button variant="ghost" className="text-white hover:bg-white/20">
@@ -31,7 +31,7 @@ const Landing = () => {
             <span className="text-emerald-200">Find your fourth in seconds.</span>
           </h2>
           <p className="text-xl text-emerald-100 mb-8">
-            Platform tennis requires exactly 4 players. NeedaFourth helps you find
+            Platform tennis requires exactly 4 players. FindaFourth helps you find
             that last player (or players) on short notice with fast, targeted
             requests and instant notifications.
           </p>
@@ -97,7 +97,7 @@ const Landing = () => {
       {/* Footer */}
       <footer className="bg-gray-950 py-8">
         <div className="container mx-auto px-4 text-center text-gray-500">
-          <p>&copy; 2024 NeedaFourth. All rights reserved.</p>
+          <p>&copy; 2024 FindaFourth. All rights reserved.</p>
         </div>
       </footer>
     </div>
