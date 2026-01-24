@@ -3,6 +3,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Toaster } from "@/components/ui/sonner";
+import { NotificationAPIProvider } from "@notificationapi/react";
 
 // Pages
 import Landing from "@/pages/Landing";
@@ -63,6 +64,29 @@ const PublicRoute = ({ children }) => {
 
   return children;
 };
+
+// Wrapper to provide NotificationAPI context when user is authenticated
+function NotificationWrapper({ children }) {
+  const { player, isAuthenticated } = useAuth();
+  const clientId = process.env.REACT_APP_NOTIFICATIONAPI_CLIENT_ID;
+
+  // Only wrap with NotificationAPIProvider if user is authenticated and clientId is configured
+  if (!isAuthenticated || !player?.id || !clientId) {
+    return children;
+  }
+
+  return (
+    <NotificationAPIProvider
+      clientId={clientId}
+      userId={player.id}
+      userEmail={player.email}
+      userPhone={player.phone}
+      customServiceWorkerPath="/notificationapi-service-worker.js"
+    >
+      {children}
+    </NotificationAPIProvider>
+  );
+}
 
 function AppRoutes() {
   return (
@@ -204,7 +228,9 @@ function App() {
     <div className="App">
       <BrowserRouter>
         <AuthProvider>
-          <AppRoutes />
+          <NotificationWrapper>
+            <AppRoutes />
+          </NotificationWrapper>
           <Toaster position="top-center" />
         </AuthProvider>
       </BrowserRouter>

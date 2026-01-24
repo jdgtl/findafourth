@@ -26,10 +26,14 @@ FindaFourth is a mobile-first Progressive Web App (PWA) for platform tennis play
   - Live scraping from paddlescores.com via Firecrawl API
   - Auto-sync PTI values to registered players by name matching
 
+### Recently Implemented
+- [x] **Notification System via Pingram.io (Jan 2026)**
+  - Email notifications (transactional)
+  - SMS notifications (opt-in)
+  - Web push notifications (via service worker)
+  - Templates: new_game_request, player_interested, player_confirmed, you_confirmed, game_cancelled, added_to_crew
+
 ### Placeholder/Mocked
-- [ ] Push notifications (placeholder functions)
-- [ ] Email notifications (placeholder functions)
-- [ ] SMS notifications via Twilio (placeholder functions)
 - [ ] Real-time updates (currently polling-based)
 
 ## API Endpoints
@@ -87,20 +91,27 @@ FindaFourth is a mobile-first Progressive Web App (PWA) for platform tennis play
 - `JWT_SECRET` - JWT signing secret
 - `CORS_ORIGINS` - Allowed CORS origins
 - `FIRECRAWL_API_KEY` - Firecrawl API key for PTI scraping
+- `NOTIFICATIONAPI_CLIENT_ID` - Pingram.io client ID for notifications
+- `NOTIFICATIONAPI_CLIENT_SECRET` - Pingram.io client secret for notifications
+- `REACT_APP_NOTIFICATIONAPI_CLIENT_ID` - Frontend client ID for web push
 
 ## Upcoming Tasks (Priority Order)
 1. **P1:** Real-time updates (WebSockets)
-2. **P1:** Push notifications integration
-3. **P1:** Email/SMS notifications (Twilio/SendGrid)
-4. **P2:** Favorites management UI
-5. **P2:** Service worker for offline support
-6. **P2:** Request expiration cron job
-7. **P3:** Detailed "My Games" view page
+2. **P2:** Request expiration cron job
+3. **P2:** Favorites management UI improvements
+4. **P2:** Service worker for offline support
+5. **P3:** Detailed "My Games" view page
 
 ## Known Issues
 - Minor frontend linting errors (unescaped entities)
 
 ## Changelog
+- **Jan 24, 2026:** Integrated Pingram.io/NotificationAPI for multi-channel notifications
+  - Email, SMS, and web push notification support
+  - Service worker for background push notifications
+  - Notification templates for game requests, responses, confirmations, and crew updates
+  - Frontend NotificationAPIProvider integration
+
 - **Jan 10, 2026:** Implemented PTI Lookup "Magic" during registration
   - Animated step-by-step lookup: "Connecting..." → "Searching..." → "Match found!"
   - Fuzzy name matching with 70%+ threshold for auto-match
