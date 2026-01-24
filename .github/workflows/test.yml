@@ -164,7 +164,7 @@ jobs:
           sleep 10
         env:
           MONGO_URL: mongodb://localhost:27017
-          DB_NAME: needafourth_test
+          DB_NAME: findafourth_test
           JWT_SECRET: test-secret-key
 
       - name: Install frontend dependencies

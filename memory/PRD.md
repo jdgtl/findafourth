@@ -1,7 +1,7 @@
-# NeedaFourth - Product Requirements Document
+# FindaFourth - Product Requirements Document
 
 ## Overview
-NeedaFourth is a mobile-first Progressive Web App (PWA) for platform tennis players to find additional players for their matches.
+FindaFourth is a mobile-first Progressive Web App (PWA) for platform tennis players to find additional players for their matches.
 
 ## Tech Stack
 - **Frontend:** React + Tailwind CSS + shadcn/ui

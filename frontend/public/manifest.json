@@ -1,6 +1,6 @@
 {
-  "name": "NeedaFourth",
-  "short_name": "Needa4th",
+  "name": "FindaFourth",
+  "short_name": "Finda4th",
   "description": "Find your fourth player for platform tennis in seconds",
   "start_url": "/",
   "display": "standalone",

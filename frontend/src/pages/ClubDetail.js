@@ -142,7 +142,7 @@ const ClubDetail = () => {
                   <UserCheck className="w-5 h-5" />
                   {registeredPlayers.length}
                 </div>
-                <p className="text-sm text-gray-500">On NeedaFourth</p>
+                <p className="text-sm text-gray-500">On FindaFourth</p>
               </div>
             </div>
           </CardContent>
@@ -153,7 +153,7 @@ const ClubDetail = () => {
           <section>
             <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
               <UserCheck className="w-5 h-5 text-emerald-600" />
-              On NeedaFourth
+              On FindaFourth
             </h2>
             <div className="space-y-2">
               {registeredPlayers.map((player, idx) => (

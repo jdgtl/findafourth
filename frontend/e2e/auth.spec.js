@@ -6,7 +6,7 @@ test.describe('Authentication', () => {
   });
 
   test('landing page loads correctly', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: /needafourth/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /findafourth/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /get started/i })).toBeVisible();
   });
