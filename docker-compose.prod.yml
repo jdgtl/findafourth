@@ -1,0 +1,42 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: findafourth-mongo
+    # Don't expose MongoDB port externally in production
+    expose:
+      - "27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=findafourth
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: findafourth-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017
+      - DB_NAME=findafourth
+      - JWT_SECRET=${JWT_SECRET}
+      - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY:-}
+      - NOTIFICATIONAPI_CLIENT_ID=${NOTIFICATIONAPI_CLIENT_ID}
+      - NOTIFICATIONAPI_CLIENT_SECRET=${NOTIFICATIONAPI_CLIENT_SECRET}
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://findafourth.com,https://www.findafourth.com}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    # Production: no --reload, use multiple workers
+    command: uvicorn server:app --host 0.0.0.0 --port 8000 --workers 2
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:

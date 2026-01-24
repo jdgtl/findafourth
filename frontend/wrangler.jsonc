@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler.json",
+  "name": "findafourth",
+  "pages_build_output_dir": "build",
+  "compatibility_date": "2024-01-01",
+
+  // Environment-specific configurations
+  "env": {
+    "production": {
+      "vars": {
+        "REACT_APP_BACKEND_URL": "https://api.findafourth.com"
+      }
+    },
+    "preview": {
+      "vars": {
+        "REACT_APP_BACKEND_URL": "https://api.findafourth.com"
+      }
+    }
+  }
+}
