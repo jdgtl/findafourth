@@ -527,6 +527,24 @@ class PTIHistory(BaseModel):
 class PTIImportRequest(BaseModel):
     players: List[dict]  # List of {player_name, pti_value, source_url?}
 
+class InviteRequest(BaseModel):
+    """Request to invite a non-registered player to join FindaFourth"""
+    player_name: str
+    club_name: str
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+
+class Invite(BaseModel):
+    """Stored invite record"""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    inviter_id: str
+    inviter_name: str
+    player_name: str
+    club_name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    sent_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
 # Target leagues for GBPTA scraping
 GBPTA_TARGET_LEAGUES = [
     "Metrowest",
@@ -1566,8 +1584,87 @@ async def delete_availability(post_id: str, current_player: dict = Depends(get_c
         raise HTTPException(status_code=403, detail="Not authorized")
     
     await db.availability_posts.delete_one({"id": post_id})
-    
+
     return {"message": "Post deleted"}
+
+# ==================== INVITE ROUTES ====================
+
+@api_router.post("/invites/send")
+async def send_invite(invite_data: InviteRequest, current_player: dict = Depends(get_current_player)):
+    """
+    Send an invite to a non-registered player to join FindaFourth.
+    Rate limited to 10 invites per hour per user.
+    """
+    # Validate that either email or phone is provided
+    if not invite_data.email and not invite_data.phone:
+        raise HTTPException(
+            status_code=400,
+            detail="Either email or phone number is required"
+        )
+
+    # Check if recipient is already registered
+    if invite_data.email:
+        existing = await db.players.find_one({"email": invite_data.email})
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail="This person is already registered on FindaFourth"
+            )
+
+    # Rate limiting: max 10 invites per hour per user
+    one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+    recent_invites = await db.invites.count_documents({
+        "inviter_id": current_player['id'],
+        "sent_at": {"$gte": one_hour_ago.isoformat()}
+    })
+
+    if recent_invites >= 10:
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded. Maximum 10 invites per hour."
+        )
+
+    # Create invite record
+    invite = Invite(
+        inviter_id=current_player['id'],
+        inviter_name=current_player.get('name', 'A FindaFourth user'),
+        player_name=invite_data.player_name,
+        club_name=invite_data.club_name,
+        email=invite_data.email,
+        phone=invite_data.phone
+    )
+
+    invite_doc = serialize_doc(invite.model_dump())
+    await db.invites.insert_one(invite_doc)
+    invite_doc.pop('_id', None)
+
+    # Send notification via Pingram
+    # Create a pseudo-player object for the notification
+    recipient = {
+        "id": f"invite_{invite.id}",
+        "email": invite_data.email,
+        "phone": invite_data.phone,
+        "notify_email": bool(invite_data.email),
+        "notify_sms": bool(invite_data.phone)
+    }
+
+    await send_notification(
+        notification_id="player_invite",
+        player=recipient,
+        merge_tags={
+            "inviterName": current_player.get('name', 'A FindaFourth user'),
+            "playerName": invite_data.player_name,
+            "clubName": invite_data.club_name,
+            "appUrl": "https://find4th.com"
+        }
+    )
+
+    logger.info(f"[INVITE] {current_player.get('email')} invited {invite_data.player_name} from {invite_data.club_name}")
+
+    return {
+        "message": f"Invite sent to {invite_data.player_name}",
+        "invite": invite_doc
+    }
 
 # ==================== PTI ROSTER ROUTES ====================
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { clubAPI } from '@/lib/api';
+import { clubAPI, inviteAPI } from '@/lib/api';
 import { getProfileImageUrl } from '@/lib/utils';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,16 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Tooltip,
   TooltipContent,
@@ -21,6 +31,9 @@ import {
   ArrowLeft,
   Mail,
   MessageSquare,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 
 const ClubDetail = () => {
@@ -158,6 +171,7 @@ const ClubDetail = () => {
                   key={idx}
                   player={player}
                   isRegistered
+                  clubName={club?.name}
                 />
               ))}
             </div>
@@ -176,7 +190,7 @@ const ClubDetail = () => {
             </h2>
             <div className="space-y-2">
               {nonRegisteredPlayers.map((player, idx) => (
-                <PlayerCard key={idx} player={player} isRegistered={false} />
+                <PlayerCard key={idx} player={player} isRegistered={false} clubName={club?.name} />
               ))}
             </div>
           </section>
@@ -186,7 +200,143 @@ const ClubDetail = () => {
   );
 };
 
-const PlayerCard = ({ player, isRegistered }) => {
+const InviteModal = ({ isOpen, onClose, playerName, clubName, inviteType }) => {
+  const [value, setValue] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState(null);
+
+  const isEmail = inviteType === 'email';
+  const placeholder = isEmail ? 'email@example.com' : '(555) 123-4567';
+  const label = isEmail ? 'Email Address' : 'Phone Number';
+  const inputType = isEmail ? 'email' : 'tel';
+
+  const validateEmail = (email) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+
+  const validatePhone = (phone) => {
+    const cleaned = phone.replace(/\D/g, '');
+    return cleaned.length >= 10;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+
+    if (isEmail && !validateEmail(value)) {
+      setError('Please enter a valid email address');
+      return;
+    }
+    if (!isEmail && !validatePhone(value)) {
+      setError('Please enter a valid phone number (at least 10 digits)');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const data = {
+        player_name: playerName,
+        club_name: clubName,
+      };
+      if (isEmail) {
+        data.email = value;
+      } else {
+        data.phone = value.replace(/\D/g, '');
+      }
+
+      await inviteAPI.send(data);
+      setSuccess(true);
+    } catch (err) {
+      const message = err.response?.data?.detail || 'Failed to send invite';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClose = () => {
+    setValue('');
+    setError(null);
+    setSuccess(false);
+    setLoading(false);
+    onClose();
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {isEmail ? (
+              <Mail className="w-5 h-5 text-blue-500" />
+            ) : (
+              <MessageSquare className="w-5 h-5 text-green-500" />
+            )}
+            Invite {playerName}
+          </DialogTitle>
+          <DialogDescription>
+            Send an invite to join FindaFourth. They'll receive a link to sign up.
+          </DialogDescription>
+        </DialogHeader>
+
+        {success ? (
+          <div className="py-6 text-center">
+            <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-3" />
+            <p className="text-lg font-medium text-gray-900 dark:text-white">
+              Invite Sent!
+            </p>
+            <p className="text-sm text-gray-500 mt-1">
+              {playerName} will receive your invite shortly.
+            </p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="invite-input">{label}</Label>
+                <Input
+                  id="invite-input"
+                  type={inputType}
+                  placeholder={placeholder}
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  disabled={loading}
+                  autoFocus
+                />
+              </div>
+              {error && (
+                <div className="flex items-center gap-2 text-sm text-red-600">
+                  <AlertCircle className="w-4 h-4" />
+                  {error}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={handleClose}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loading || !value}>
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  'Send Invite'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const PlayerCard = ({ player, isRegistered, clubName }) => {
+  const [inviteModal, setInviteModal] = useState({ open: false, type: null });
+
   const getInitials = (name) => {
     return name
       .split(' ')
@@ -203,17 +353,23 @@ const PlayerCard = ({ player, isRegistered }) => {
 
   const handleInviteEmail = (e) => {
     e.stopPropagation();
-    // TODO: Implement email invite - will need to collect email
-    alert('Email invite coming soon! You\'ll be able to enter their email address.');
+    setInviteModal({ open: true, type: 'email' });
   };
 
   const handleInviteText = (e) => {
     e.stopPropagation();
-    // TODO: Implement text invite - will need to collect phone
-    alert('Text invite coming soon! You\'ll be able to enter their phone number.');
+    setInviteModal({ open: true, type: 'sms' });
   };
 
   return (
+    <>
+      <InviteModal
+        isOpen={inviteModal.open}
+        onClose={() => setInviteModal({ open: false, type: null })}
+        playerName={player.player_name}
+        clubName={clubName}
+        inviteType={inviteModal.type}
+      />
     <TooltipProvider>
       <div
         className="group p-3 rounded-[0.4rem] transition-all duration-500 ease-out
@@ -306,6 +462,7 @@ const PlayerCard = ({ player, isRegistered }) => {
         </div>
       </div>
     </TooltipProvider>
+    </>
   );
 };
 

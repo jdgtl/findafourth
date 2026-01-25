@@ -118,6 +118,11 @@ export const ptiAPI = {
   getHistory: (playerName) => api.get('/pti/history', { params: { player_name: playerName } }),
 };
 
+// Invite APIs
+export const inviteAPI = {
+  send: (data) => api.post('/invites/send', data),
+};
+
 // Utility APIs (deprecated - use clubAPI.getSuggestions instead)
 export const utilityAPI = {
   getClubSuggestions: () => api.get('/clubs/suggestions'),
