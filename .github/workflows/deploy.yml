@@ -51,5 +51,6 @@ jobs:
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: bddae7eecfff3e0fb41ae0f3c0bac27d
           workingDirectory: frontend
           command: pages deploy build --project-name=findafourth --branch=main
