@@ -67,8 +67,8 @@
     "test:e2e:debug": "playwright test --debug",
     "test:all": "yarn test:ci && yarn test:e2e",
     "playwright:install": "playwright install --with-deps",
-    "deploy": "yarn build && wrangler pages deploy build --project-name=findafourth",
-    "deploy:preview": "yarn build && wrangler pages deploy build --project-name=findafourth --branch=preview"
+    "deploy": "yarn build && wrangler pages deploy build --project-name=find4th",
+    "deploy:preview": "yarn build && wrangler pages deploy build --project-name=find4th --branch=preview"
   },
   "browserslist": {
     "production": [

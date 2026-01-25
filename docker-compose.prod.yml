@@ -30,7 +30,7 @@ services:
       - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY:-}
       - NOTIFICATIONAPI_CLIENT_ID=${NOTIFICATIONAPI_CLIENT_ID}
       - NOTIFICATIONAPI_CLIENT_SECRET=${NOTIFICATIONAPI_CLIENT_SECRET}
-      - CORS_ORIGINS=${CORS_ORIGINS:-https://findafourth.com,https://www.findafourth.com}
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://find4th.com,https://www.find4th.com}
     depends_on:
       mongodb:
         condition: service_healthy

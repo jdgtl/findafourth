@@ -14,10 +14,10 @@
 
 ## 1. Domain Setup (Cloudflare)
 
-1. Purchase/transfer domain to Cloudflare (e.g., `findafourth.com`)
+1. Purchase/transfer domain to Cloudflare (e.g., `find4th.com`)
 2. DNS records will be configured after infrastructure is set up:
-   - `findafourth.com` → Cloudflare Pages
-   - `api.findafourth.com` → Digital Ocean Droplet IP
+   - `find4th.com` → Cloudflare Pages
+   - `api.find4th.com` → Digital Ocean Droplet IP
 
 ## 2. Backend Setup (Digital Ocean Droplet)
 
@@ -111,7 +111,7 @@ Add this nginx config:
 ```nginx
 server {
     listen 443 ssl;
-    server_name api.findafourth.com;
+    server_name api.find4th.com;
 
     ssl_certificate /etc/ssl/cloudflare.crt;
     ssl_certificate_key /etc/ssl/cloudflare.key;
@@ -131,7 +131,7 @@ server {
 
 server {
     listen 80;
-    server_name api.findafourth.com;
+    server_name api.find4th.com;
     return 301 https://$server_name$request_uri;
 }
 ```
@@ -161,7 +161,7 @@ wrangler pages project create findafourth
 
 ```bash
 # Set the backend URL for production build
-export REACT_APP_BACKEND_URL=https://api.findafourth.com
+export REACT_APP_BACKEND_URL=https://api.find4th.com
 export REACT_APP_NOTIFICATIONAPI_CLIENT_ID=your-client-id
 
 # Build and deploy
@@ -171,13 +171,13 @@ wrangler pages deploy build --project-name=findafourth --branch=main
 
 Or use the npm script:
 ```bash
-REACT_APP_BACKEND_URL=https://api.findafourth.com yarn deploy
+REACT_APP_BACKEND_URL=https://api.find4th.com yarn deploy
 ```
 
 ### Configure Custom Domain
 
 1. In Cloudflare Dashboard → Pages → findafourth → Custom domains
-2. Add `findafourth.com` and `www.findafourth.com`
+2. Add `find4th.com` and `www.find4th.com`
 
 ## 4. DNS Configuration (Cloudflare)
 
