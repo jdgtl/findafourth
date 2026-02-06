@@ -61,8 +61,8 @@ def normalize_club_name(team_name: str) -> str:
     """
     Extract the base club name from a team name.
     Handles various patterns:
-    - "Cape Ann 1" -> "Cape Ann"
-    - "Cape Ann Cage Fighters" -> "Cape Ann"
+    - "Cape Ann 1" -> "Cape Ann Platform Tennis"
+    - "Cape Ann Cage Fighters" -> "Cape Ann Platform Tennis"
     - "Myopia Gold" -> "Myopia"
     - "TCC 1" -> "The Country Club"
     """
@@ -87,7 +87,7 @@ def normalize_club_name(team_name: str) -> str:
     # Step 3: Pattern-based normalization rules
     pattern_rules = [
         # Cape Ann variants
-        (r".*Cape Ann.*", "Cape Ann"),
+        (r".*Cape Ann.*", "Cape Ann Platform Tennis"),
         # Myopia variants (Gold, Red, etc.)
         (r"^Myopia\s+\w+$", "Myopia"),
         # Essex variants (2M, 2T, etc.)

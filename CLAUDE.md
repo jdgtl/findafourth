@@ -9,119 +9,116 @@ FindaFourth is a mobile-first Progressive Web App (PWA) for platform tennis play
 ## Tech Stack
 
 - **Frontend**: React 19 with CRACO, React Router, Tailwind CSS, shadcn/ui components
-- **Backend**: FastAPI with Pydantic models
+- **Backend**: FastAPI (single-file: `backend/server.py`) with Pydantic models
 - **Database**: MongoDB (via Motor async driver)
 - **Auth**: Custom JWT authentication (email/password)
+- **Hosting**: DigitalOcean Droplet (backend + MongoDB), Cloudflare Pages (frontend)
 
 ## Development Commands
 
 ### Docker (Recommended)
 ```bash
-docker-compose up --build    # Start all services (MongoDB, backend, frontend)
-docker-compose down          # Stop all services
-docker-compose down -v       # Stop and remove volumes (wipes database)
-docker-compose logs -f       # View logs from all services
-docker-compose logs backend  # View logs from specific service
+docker-compose up --build       # Start all services (MongoDB, backend, frontend)
+docker-compose down             # Stop all services
+docker-compose down -v          # Stop and remove volumes (wipes database)
+docker-compose logs -f backend  # Tail backend logs
 ```
 
-Services run at:
-- Frontend: http://localhost:3000
-- Backend: http://localhost:8000
-- MongoDB: localhost:27017
+Services: Frontend http://localhost:3000, Backend http://localhost:8000, MongoDB localhost:27017
 
-### Manual Setup (without Docker)
-
-#### Frontend (from `/frontend` directory)
+### Frontend (from `/frontend` directory)
 ```bash
-yarn install        # Install dependencies
-yarn start          # Run dev server
-yarn build          # Production build
-yarn test           # Run tests
+yarn install                    # Install dependencies
+yarn start                      # Dev server (uses craco)
+yarn build                      # Production build (uses craco)
+yarn test                       # Jest tests (watch mode)
+yarn test:ci                    # Jest with coverage, no watch
+yarn test:e2e                   # Playwright E2E tests
+yarn test:e2e:headed            # E2E with visible browser
 ```
 
-#### Backend (from `/backend` directory)
+### Backend (from `/backend` directory)
 ```bash
 pip install -r requirements.txt
 uvicorn server:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### Environment Variables
-Copy `.env.example` to `.env` and configure:
-- `JWT_SECRET` - Secret key for JWT tokens (change in production)
-- `FIRECRAWL_API_KEY` - Optional, for PTI scraping feature
-- `NOTIFICATIONAPI_CLIENT_ID` - Pingram.io/NotificationAPI client ID
-- `NOTIFICATIONAPI_CLIENT_SECRET` - Pingram.io/NotificationAPI client secret
-
-Docker-compose sets these automatically:
-- `MONGO_URL` - MongoDB connection string
-- `DB_NAME` - Database name (default: findafourth)
-- `REACT_APP_BACKEND_URL` - Backend API URL
-- `REACT_APP_NOTIFICATIONAPI_CLIENT_ID` - Frontend notification client ID
+### Production Access
+```bash
+doctl compute droplet list                                    # Find droplet IP
+ssh -i ~/.ssh/id_ed25519_do root@<IP> "docker exec findafourth-mongo mongosh --quiet findafourth --eval '<query>'"
+```
 
 ## Architecture
 
 ### Backend (`backend/server.py`)
-Single-file FastAPI application containing:
-- Pydantic models for all entities (Player, Crew, GameRequest, etc.)
-- JWT auth helpers and middleware
-- All API routes under `/api` prefix
-- Notification system via Pingram.io/NotificationAPI (email, SMS, web push)
+Single-file FastAPI application (~3300 lines) containing all Pydantic models, JWT auth, API routes, notification logic, and PTI scraping.
 
-API route groups: `/api/auth/*`, `/api/players/*`, `/api/crews/*`, `/api/requests/*`, `/api/favorites/*`, `/api/availability/*`, `/api/pti/*`
+API route groups: `/api/auth/*`, `/api/players/*`, `/api/crews/*`, `/api/requests/*`, `/api/favorites/*`, `/api/availability/*`, `/api/pti/*`, `/api/clubs/*`, `/api/admin/*`
 
 ### Frontend Structure
 - `src/contexts/AuthContext.js` - Auth state management with localStorage persistence
-- `src/lib/api.js` - Axios-based API client with auth interceptors
-- `src/pages/` - Route components (Home, CreateRequest, Crews, etc.)
+- `src/lib/api.js` - Axios-based API client with auth interceptors. Exports: `authAPI`, `playerAPI`, `requestAPI`, `crewAPI`, `favoriteAPI`, `availabilityAPI`, `clubAPI`, `ptiAPI`, `inviteAPI`, `tenniscoresAPI`. (`utilityAPI` is deprecated, use `clubAPI`)
+- `src/pages/` - Route components
 - `src/components/` - Shared components including shadcn/ui in `components/ui/`
 - `src/App.js` - Route definitions with ProtectedRoute/PublicRoute wrappers
+- Path alias: `@/` resolves to `src/` (configured in `craco.config.js`)
 
 ### Database Collections
-- `players` - User accounts with profile and notification preferences
+- `players` - User accounts with profile, notification preferences, club affiliations
 - `requests` - Game requests with audience targeting
-- `crews` - Player groups
-- `crew_members` - Crew membership join table
+- `crews` / `crew_members` - Player groups and membership
 - `favorites` - Player favorite relationships
 - `availability_posts` - Player availability announcements
 - `responses` - Game request responses
+- `pti_roster` - Deduplicated PTI roster (canonical club names in `clubs` array field)
+- `pti_roster_raw` - Raw scraped roster data
+- `pti_history` - Historical PTI snapshots for trend tracking
+- `clubs` - Club metadata from GBPTA scraping
+- `invites` - Player invite records
+
+## Club Name Normalization
+
+User-entered club names are normalized against canonical PTI roster names at save time.
+
+- `normalize_club_name()` (~line 60) - Extracts base club name from GBPTA team names (e.g., "Cape Ann Cage Fighters" → "Cape Ann", "TCC" → "The Country Club")
+- `normalize_user_club_input()` (~line 106) - Async function that normalizes free-text user input against `pti_roster.distinct("clubs")`. Tries exact match, then `normalize_club_name()`, then strips common suffixes ("Platform Tennis Club", "Paddle Club", "PTC", etc.), then case-insensitive match. Returns original input for non-GBPTA clubs.
+- Applied in `complete_profile` and `update_player` endpoints
+- `POST /api/admin/normalize-clubs` - One-time migration endpoint for existing data
+
+### Club Combobox Pattern
+Club selection uses Popover + Command (shadcn/ui) with `shouldFilter={true}` and an "Other (enter manually)" option. See `CreateAvailability.js` for the canonical pattern. Also used in `CompleteProfile.js` and `Profile.js`.
+
+## PTI Scraping System
+
+Automated weekly sync from GBPTA (Greater Boston PTA) standings:
+- Runs every Tuesday at 6:00 AM EST via APScheduler
+- Pipeline: scrape clubs → scrape rosters → deduplicate → record history → sync to players
+- Admin endpoints under `/api/admin/gbpta/*` for manual triggering of individual steps
+
+## Deployment
+
+Push to `main` triggers GitHub Actions (`.github/workflows/deploy.yml`):
+- **Backend**: SSH to DigitalOcean droplet → `git pull` → `docker compose -f docker-compose.prod.yml up -d --build`
+- **Frontend**: Build with `yarn build` → deploy to Cloudflare Pages via wrangler
 
 ## Notification System
 
-The app uses Pingram.io (formerly NotificationAPI) for multi-channel notifications:
-- **Email**: Transactional emails for game requests, confirmations
-- **SMS**: Optional text notifications (requires phone number)
-- **Web Push**: Browser push notifications via service worker
+Pingram.io (formerly NotificationAPI) for email, SMS, and web push notifications. Templates configured in the Pingram.io dashboard: `new_game_request`, `player_interested`, `player_confirmed`, `you_confirmed`, `game_cancelled`, `added_to_crew`, `player_invite`.
 
-### Notification Templates (configure in Pingram.io dashboard)
-- `new_game_request` - Sent when a new game is posted to target audience
-- `player_interested` - Sent to organizer when someone expresses interest
-- `player_confirmed` - Sent to organizer when player auto-confirms (quick_fill mode)
-- `you_confirmed` - Sent to player when organizer confirms them
-- `game_cancelled` - Sent to confirmed players when game is cancelled
-- `added_to_crew` - Sent when player is added to a crew
+## Testing
 
-### Frontend Integration
-The `NotificationAPIProvider` in `App.js` handles:
-- Web push subscription registration
-- Service worker registration (`/notificationapi-service-worker.js`)
-- User identification for targeted notifications
+- **Unit tests**: Jest via `yarn test` or `yarn test:ci`. Tests in `src/__tests__/`.
+- **E2E tests**: Playwright. Tests in `frontend/e2e/`. Config shards across chromium desktop and iPhone 13.
+- **CI**: `.github/workflows/test.yml` runs on push/PR. Includes an intelligent test agent (`scripts/intelligent_test_agent.py`) that selects tests based on git diff.
 
 ## Known Issues & Patterns
 
 ### MongoDB ObjectId Serialization
-When creating documents and returning them in API responses, always remove the `_id` field:
-```python
-await db.collection.insert_one(doc)
-doc.pop('_id', None)  # Remove before returning
-```
-For queries, use projection: `{"_id": 0}`
+Always remove `_id` before returning documents. Use `doc.pop('_id', None)` after insert, or projection `{"_id": 0}` in queries.
 
 ### Global CSS Styling
-The global `input` selector in `index.css` was modified to use a more specific selector to avoid conflicts with checkboxes and toggles. Be mindful when adding new form controls.
+The global `input` selector in `index.css` uses a specific selector to avoid conflicts with checkboxes/toggles. Be mindful when adding new form controls.
 
 ### Custom Components
 `CreateRequest.js` contains custom calendar and time picker implementations built directly in the page file, plus modified shadcn slider/switch/checkbox components.
-
-## Testing Protocol
-
-This project uses a testing agent workflow. The `test_result.md` file tracks testing state and is used for communication between main and testing agents. Update this file before calling the testing agent.
