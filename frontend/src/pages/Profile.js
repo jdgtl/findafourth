@@ -1,8 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { playerAPI, tenniscoresAPI } from '@/lib/api';
-import { getProfileImageUrl } from '@/lib/utils';
+import { playerAPI, clubAPI, tenniscoresAPI } from '@/lib/api';
+import { getProfileImageUrl, cn } from '@/lib/utils';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,20 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Loader2, X, LogOut, Trash2, User, Bell, Eye, Shield, Camera, BadgeCheck } from 'lucide-react';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Loader2, X, LogOut, Trash2, User, Bell, Eye, Shield, Camera, BadgeCheck, ChevronsUpDown, Check, Plus } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import PTIHistoryChart from '@/components/PTIHistoryChart';
 import PartnerChemistry from '@/components/PartnerChemistry';
@@ -50,6 +63,23 @@ const Profile = () => {
   const [notifyEmail, setNotifyEmail] = useState(player?.notify_email ?? true);
   const [notifySms, setNotifySms] = useState(player?.notify_sms ?? false);
   const [visibility, setVisibility] = useState(player?.visibility || 'everyone');
+  const [clubSuggestions, setClubSuggestions] = useState([]);
+  const [homeClubOpen, setHomeClubOpen] = useState(false);
+  const [homeClubCustom, setHomeClubCustom] = useState(false);
+  const [otherClubOpen, setOtherClubOpen] = useState(false);
+  const [otherClubCustom, setOtherClubCustom] = useState(false);
+
+  useEffect(() => {
+    const loadClubs = async () => {
+      try {
+        const response = await clubAPI.getSuggestions();
+        setClubSuggestions(response.data);
+      } catch (err) {
+        console.error('Failed to load club suggestions');
+      }
+    };
+    loadClubs();
+  }, []);
 
   const handleAddClub = () => {
     if (newClub.trim() && !otherClubs.includes(newClub.trim())) {
@@ -265,29 +295,169 @@ const Profile = () => {
 
             <div className="space-y-2">
               <Label htmlFor="homeClub">Home Club</Label>
-              <Input
-                id="homeClub"
-                value={homeClub}
-                onChange={(e) => setHomeClub(e.target.value)}
-                disabled={!editing}
-                data-testid="home-club-input"
-              />
+              {editing ? (
+                homeClubCustom ? (
+                  <div className="flex gap-2">
+                    <Input
+                      id="homeClub"
+                      placeholder="Enter your club name"
+                      value={homeClub}
+                      onChange={(e) => setHomeClub(e.target.value)}
+                      data-testid="home-club-input"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setHomeClubCustom(false); setHomeClub(player?.home_club || ''); }}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Popover open={homeClubOpen} onOpenChange={setHomeClubOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={homeClubOpen}
+                        className="w-full justify-between font-normal"
+                        data-testid="home-club-input"
+                      >
+                        {homeClub || "Select your club..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command shouldFilter={true}>
+                        <CommandInput placeholder="Search clubs..." />
+                        <CommandList>
+                          <CommandEmpty>No club found.</CommandEmpty>
+                          <CommandGroup heading="Clubs">
+                            {clubSuggestions.map((club) => (
+                              <CommandItem
+                                key={club}
+                                value={club}
+                                onSelect={() => {
+                                  setHomeClub(club);
+                                  setHomeClubOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    homeClub === club ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {club}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                          <CommandGroup heading="Custom">
+                            <CommandItem
+                              value="other-enter-manually"
+                              onSelect={() => {
+                                setHomeClubCustom(true);
+                                setHomeClubOpen(false);
+                                setHomeClub('');
+                              }}
+                              className="text-muted-foreground"
+                            >
+                              <Plus className="mr-2 h-4 w-4" />
+                              Other (enter manually)
+                            </CommandItem>
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                )
+              ) : (
+                <Input
+                  id="homeClub"
+                  value={homeClub}
+                  disabled
+                  data-testid="home-club-input"
+                />
+              )}
             </div>
 
             <div className="space-y-2">
               <Label>Other Clubs</Label>
               {editing && (
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Add another club"
-                    value={newClub}
-                    onChange={(e) => setNewClub(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddClub())}
-                  />
-                  <Button type="button" variant="outline" onClick={handleAddClub}>
-                    Add
-                  </Button>
-                </div>
+                otherClubCustom ? (
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Enter club name"
+                      value={newClub}
+                      onChange={(e) => setNewClub(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddClub();
+                          setOtherClubCustom(false);
+                        }
+                      }}
+                    />
+                    <Button type="button" variant="outline" onClick={() => { handleAddClub(); setOtherClubCustom(false); }}>
+                      Add
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => { setOtherClubCustom(false); setNewClub(''); }}>
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Popover open={otherClubOpen} onOpenChange={setOtherClubOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={otherClubOpen}
+                        className="w-full justify-between font-normal"
+                      >
+                        Add another club...
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command shouldFilter={true}>
+                        <CommandInput placeholder="Search clubs..." />
+                        <CommandList>
+                          <CommandEmpty>No club found.</CommandEmpty>
+                          <CommandGroup heading="Clubs">
+                            {clubSuggestions.filter(c => c !== homeClub && !otherClubs.includes(c)).map((club) => (
+                              <CommandItem
+                                key={club}
+                                value={club}
+                                onSelect={() => {
+                                  if (!otherClubs.includes(club)) {
+                                    setOtherClubs([...otherClubs, club]);
+                                  }
+                                  setOtherClubOpen(false);
+                                }}
+                              >
+                                {club}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                          <CommandGroup heading="Custom">
+                            <CommandItem
+                              value="other-enter-manually"
+                              onSelect={() => {
+                                setOtherClubCustom(true);
+                                setOtherClubOpen(false);
+                              }}
+                              className="text-muted-foreground"
+                            >
+                              <Plus className="mr-2 h-4 w-4" />
+                              Other (enter manually)
+                            </CommandItem>
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                )
               )}
               <div className="flex flex-wrap gap-2">
                 {otherClubs.map((club) => (
@@ -381,6 +551,9 @@ const Profile = () => {
                     setOtherClubs(player?.other_clubs || []);
                     setPti(player?.pti?.toString() || '');
                     setPhone(player?.phone || '');
+                    setHomeClubCustom(false);
+                    setOtherClubCustom(false);
+                    setNewClub('');
                   }}
                 >
                   Cancel

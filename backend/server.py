@@ -103,6 +103,75 @@ def normalize_club_name(team_name: str) -> str:
     return name
 
 
+async def normalize_user_club_input(club_name: str) -> str:
+    """
+    Normalize a user-entered club name to match canonical PTI roster club names.
+    Falls back to the original input for non-GBPTA clubs.
+    """
+    import re
+
+    if not club_name or not club_name.strip():
+        return club_name
+
+    name = club_name.strip()
+
+    # Get canonical club names from PTI roster
+    try:
+        canonical_clubs = await db.pti_roster.distinct("clubs")
+        # Flatten: clubs field contains lists
+        canonical_set = set()
+        for c in canonical_clubs:
+            if isinstance(c, list):
+                canonical_set.update(c)
+            elif c:
+                canonical_set.add(c)
+    except Exception:
+        canonical_set = set()
+
+    if not canonical_set:
+        return name
+
+    # 1. Exact match against canonical clubs
+    if name in canonical_set:
+        return name
+
+    # 2. Run existing normalize_club_name() and check
+    normalized = normalize_club_name(name)
+    if normalized in canonical_set:
+        return normalized
+
+    # 3. Strip common user suffixes and check
+    suffixes_to_strip = [
+        r"\s+Platform\s+Tennis\s+Club$",
+        r"\s+Platform\s+Tennis$",
+        r"\s+Paddle\s+Tennis\s+Club$",
+        r"\s+Paddle\s+Club$",
+        r"\s+Paddle$",
+        r"\s+PTC$",
+        r"\s+PT$",
+        r"\s+Club$",
+    ]
+
+    for suffix in suffixes_to_strip:
+        stripped = re.sub(suffix, "", name, flags=re.IGNORECASE).strip()
+        if stripped != name:
+            if stripped in canonical_set:
+                return stripped
+            # Also try normalize_club_name on the stripped version
+            stripped_normalized = normalize_club_name(stripped)
+            if stripped_normalized in canonical_set:
+                return stripped_normalized
+
+    # 4. Case-insensitive match against canonical clubs
+    name_lower = name.lower()
+    for canon in canonical_set:
+        if canon.lower() == name_lower:
+            return canon
+
+    # No match found - return original input (for non-GBPTA clubs)
+    return name
+
+
 async def run_gbpta_full_sync():
     """
     Execute the full GBPTA sync pipeline.
@@ -746,10 +815,16 @@ async def get_me(current_player: dict = Depends(get_current_player)):
 
 @api_router.put("/auth/complete-profile")
 async def complete_profile(profile: PlayerProfile, current_player: dict = Depends(get_current_player)):
+    # Normalize club names to match canonical PTI roster names
+    normalized_home_club = await normalize_user_club_input(profile.home_club) if profile.home_club else profile.home_club
+    normalized_other_clubs = []
+    for club in (profile.other_clubs or []):
+        normalized_other_clubs.append(await normalize_user_club_input(club))
+
     update_data = {
         "name": profile.name,
-        "home_club": profile.home_club,
-        "other_clubs": profile.other_clubs,
+        "home_club": normalized_home_club,
+        "other_clubs": normalized_other_clubs,
         "pti": profile.pti,
         "pti_verified": profile.pti_verified or False,
         "phone": profile.phone,
@@ -799,11 +874,17 @@ async def update_player(player_id: str, data: PlayerUpdate, current_player: dict
     existing_player = await db.players.find_one({"id": player_id}, {"_id": 0})
     
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
-    
+
     # If PTI is verified, remove PTI from update data (can't be changed by user)
     if existing_player and existing_player.get('pti_verified') and 'pti' in update_data:
         del update_data['pti']
-    
+
+    # Normalize club names to match canonical PTI roster names
+    if 'home_club' in update_data and update_data['home_club']:
+        update_data['home_club'] = await normalize_user_club_input(update_data['home_club'])
+    if 'other_clubs' in update_data and update_data['other_clubs']:
+        update_data['other_clubs'] = [await normalize_user_club_input(c) for c in update_data['other_clubs']]
+
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     
     await db.players.update_one({"id": player_id}, {"$set": update_data})
@@ -3177,13 +3258,24 @@ async def get_club(club_id: str, current_player: dict = Depends(get_current_play
 
 @api_router.get("/clubs/suggestions")
 async def get_club_suggestions(current_player: dict = Depends(get_current_player)):
-    """Get common clubs for autocomplete"""
-    # Get distinct clubs from players
+    """Get known clubs for autocomplete, prioritizing PTI roster clubs"""
+    all_clubs = set()
+
+    # Primary source: canonical clubs from PTI roster
+    try:
+        roster_clubs = await db.pti_roster.distinct("clubs")
+        for c in roster_clubs:
+            if isinstance(c, list):
+                all_clubs.update(c)
+            elif c:
+                all_clubs.add(c)
+    except Exception:
+        pass
+
+    # Secondary source: player-entered clubs
     home_clubs = await db.players.distinct("home_club")
     other_clubs = await db.players.distinct("other_clubs")
 
-    # Combine and dedupe
-    all_clubs = set()
     for club in home_clubs:
         if club:
             all_clubs.add(club)
@@ -3195,19 +3287,42 @@ async def get_club_suggestions(current_player: dict = Depends(get_current_player
         elif clubs:
             all_clubs.add(clubs)
 
-    # Add some common platform tennis clubs
-    common_clubs = [
-        "Paddle Club",
-        "Country Club",
-        "Tennis & Paddle Club",
-        "Racquet Club",
-        "Athletic Club",
-        "Sports Club"
-    ]
-    for club in common_clubs:
-        all_clubs.add(club)
-    
+    # Remove empty strings
+    all_clubs.discard("")
+
     return sorted(list(all_clubs))
+
+@api_router.post("/admin/normalize-clubs")
+async def admin_normalize_clubs(current_player: dict = Depends(get_current_player)):
+    """One-time migration: normalize all player club names against PTI roster."""
+    players = await db.players.find({}, {"_id": 0}).to_list(None)
+    updated_count = 0
+
+    for p in players:
+        changes = {}
+        if p.get("home_club"):
+            normalized = await normalize_user_club_input(p["home_club"])
+            if normalized != p["home_club"]:
+                changes["home_club"] = normalized
+
+        if p.get("other_clubs"):
+            normalized_others = []
+            changed = False
+            for club in p["other_clubs"]:
+                n = await normalize_user_club_input(club)
+                normalized_others.append(n)
+                if n != club:
+                    changed = True
+            if changed:
+                changes["other_clubs"] = normalized_others
+
+        if changes:
+            changes["updated_at"] = datetime.now(timezone.utc).isoformat()
+            await db.players.update_one({"id": p["id"]}, {"$set": changes})
+            updated_count += 1
+            logger.info(f"Normalized clubs for {p.get('name', p['id'])}: {changes}")
+
+    return {"updated_count": updated_count, "total_players": len(players)}
 
 @api_router.get("/")
 async def root():
