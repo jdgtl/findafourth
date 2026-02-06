@@ -3151,6 +3151,42 @@ async def get_clubs_with_details(current_player: dict = Depends(get_current_play
 
     return result
 
+@api_router.get("/clubs/suggestions")
+async def get_club_suggestions(current_player: dict = Depends(get_current_player)):
+    """Get known clubs for autocomplete, prioritizing PTI roster clubs"""
+    all_clubs = set()
+
+    # Primary source: canonical clubs from PTI roster
+    try:
+        roster_clubs = await db.pti_roster.distinct("clubs")
+        for c in roster_clubs:
+            if isinstance(c, list):
+                all_clubs.update(c)
+            elif c:
+                all_clubs.add(c)
+    except Exception:
+        pass
+
+    # Secondary source: player-entered clubs
+    home_clubs = await db.players.distinct("home_club")
+    other_clubs = await db.players.distinct("other_clubs")
+
+    for club in home_clubs:
+        if club:
+            all_clubs.add(club)
+    for clubs in other_clubs:
+        if isinstance(clubs, list):
+            for club in clubs:
+                if club:
+                    all_clubs.add(club)
+        elif clubs:
+            all_clubs.add(clubs)
+
+    # Remove empty strings
+    all_clubs.discard("")
+
+    return sorted(list(all_clubs))
+
 @api_router.get("/clubs/{club_id}")
 async def get_club(club_id: str, current_player: dict = Depends(get_current_player)):
     """
@@ -3256,41 +3292,6 @@ async def get_club(club_id: str, current_player: dict = Depends(get_current_play
         "registered_count": len(registered_users)
     }
 
-@api_router.get("/clubs/suggestions")
-async def get_club_suggestions(current_player: dict = Depends(get_current_player)):
-    """Get known clubs for autocomplete, prioritizing PTI roster clubs"""
-    all_clubs = set()
-
-    # Primary source: canonical clubs from PTI roster
-    try:
-        roster_clubs = await db.pti_roster.distinct("clubs")
-        for c in roster_clubs:
-            if isinstance(c, list):
-                all_clubs.update(c)
-            elif c:
-                all_clubs.add(c)
-    except Exception:
-        pass
-
-    # Secondary source: player-entered clubs
-    home_clubs = await db.players.distinct("home_club")
-    other_clubs = await db.players.distinct("other_clubs")
-
-    for club in home_clubs:
-        if club:
-            all_clubs.add(club)
-    for clubs in other_clubs:
-        if isinstance(clubs, list):
-            for club in clubs:
-                if club:
-                    all_clubs.add(club)
-        elif clubs:
-            all_clubs.add(clubs)
-
-    # Remove empty strings
-    all_clubs.discard("")
-
-    return sorted(list(all_clubs))
 
 @api_router.post("/admin/normalize-clubs")
 async def admin_normalize_clubs(current_player: dict = Depends(get_current_player)):
