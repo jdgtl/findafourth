@@ -57,118 +57,101 @@ if NOTIFICATIONAPI_CLIENT_ID and NOTIFICATIONAPI_CLIENT_SECRET:
 # Scheduler for automated tasks
 scheduler = AsyncIOScheduler()
 
-def normalize_club_name(team_name: str) -> str:
+import re
+
+# Official GBPTA club directory — single source of truth for club names.
+# Aliases include old short names, abbreviations, and scraped team-name prefixes.
+CLUB_DIRECTORY = [
+    {"name": "Belmont Hill Club", "aliases": ["Belmont Hill"]},
+    {"name": "Blackrock Golf Club", "aliases": ["Blackrock", "Black Rock"]},
+    {"name": "Brae Burn Country Club", "aliases": ["Brae Burn", "Braeburn"]},
+    {"name": "Brookline Paddle", "aliases": ["Brookline"]},
+    {"name": "Cape Ann Platform Tennis", "aliases": ["Cape Ann"]},
+    {"name": "Cohasset Golf Club", "aliases": ["Cohasset"]},
+    {"name": "Concord Country Club", "aliases": ["Concord"]},
+    {"name": "Dedham Country & Polo Club", "aliases": ["Dedham", "Dedham Country and Polo Club"]},
+    {"name": "Duxbury Yacht Club", "aliases": ["Duxbury"]},
+    {"name": "Eastern Yacht Club", "aliases": ["Eastern"]},
+    {"name": "Essex County Club", "aliases": ["Essex"]},
+    {"name": "Heritage Racquet Club", "aliases": ["Heritage"]},
+    {"name": "Kingsbury Club", "aliases": ["Kingsbury"]},
+    {"name": "Longwood", "aliases": ["Longwood Cricket Club"]},
+    {"name": "Myopia Hunt Club", "aliases": ["Myopia"]},
+    {"name": "Nahant Platform Tennis Club", "aliases": ["Nahant", "Nahant PTC"]},
+    {"name": "Nashawtuc Country Club", "aliases": ["Nashawtuc"]},
+    {"name": "Needham Platform Tennis Club", "aliases": ["Needham", "Needham PTC"]},
+    {"name": "North Andover Country Club", "aliases": ["North Andover"]},
+    {"name": "Scituate Racquet Club", "aliases": ["Scituate"]},
+    {"name": "The Country Club", "aliases": ["TCC"]},
+    {"name": "The Platform Tennis Club", "aliases": ["Platform Tennis Club", "TPTC"]},
+    {"name": "Wellesley Country Club", "aliases": ["Wellesley"]},
+    {"name": "Weston Golf Club", "aliases": ["Weston"]},
+    {"name": "Winchester Country Club", "aliases": ["Winchester"]},
+    {"name": "Woodland Golf Club", "aliases": ["Woodland"]},
+    {"name": "York Platform Tennis Club", "aliases": ["York", "York PTC"]},
+]
+
+
+async def seed_club_directory():
+    """Seed the club_directory collection from CLUB_DIRECTORY on startup."""
+    for entry in CLUB_DIRECTORY:
+        await db.club_directory.update_one(
+            {"name": entry["name"]},
+            {"$set": {"name": entry["name"], "aliases": entry["aliases"]}},
+            upsert=True,
+        )
+    logger.info(f"Club directory seeded: {len(CLUB_DIRECTORY)} clubs")
+
+
+async def resolve_club_name(input_name: str) -> str:
     """
-    Extract the base club name from a team name.
-    Handles various patterns:
-    - "Cape Ann 1" -> "Cape Ann Platform Tennis"
-    - "Cape Ann Cage Fighters" -> "Cape Ann Platform Tennis"
-    - "Myopia Gold" -> "Myopia"
-    - "TCC 1" -> "The Country Club"
+    Resolve a club name (scraped team name or user input) to its official name.
+    1. Strip trailing numbers (e.g. "Cape Ann 1" -> "Cape Ann")
+    2. Strip trailing team suffixes (e.g. "Myopia Gold" -> "Myopia", "Cape Ann Cage Fighters" -> "Cape Ann")
+    3. Check if input matches an official name (case-insensitive)
+    4. Check if input matches any alias in club_directory (case-insensitive)
+    5. Return original input unchanged for non-GBPTA clubs
     """
-    import re
+    if not input_name or not input_name.strip():
+        return input_name
 
-    name = team_name.strip()
+    name = input_name.strip()
 
-    # Step 1: Strip trailing numbers FIRST (e.g., "Needham PTC 1" -> "Needham PTC")
-    name = re.sub(r'\s+\d+\s*$', '', name)
+    # Build lookup from DB
+    entries = await db.club_directory.find({}, {"_id": 0}).to_list(100)
+    official_names_lower = {e["name"].lower(): e["name"] for e in entries}
+    alias_to_official = {}
+    for e in entries:
+        for alias in e.get("aliases", []):
+            alias_to_official[alias.lower()] = e["name"]
 
-    # Step 2: Check explicit mappings for abbreviations and special cases
-    explicit_mappings = {
-        "TCC": "The Country Club",
-        "Needham PTC": "Needham",
-        "Needham Platform Tennis Club": "Needham",
-        "Belmont Hill Club": "Belmont Hill",
-    }
+    # Try exact official match first (case-insensitive)
+    if name.lower() in official_names_lower:
+        return official_names_lower[name.lower()]
 
-    if name in explicit_mappings:
-        return explicit_mappings[name]
+    # Try alias match on raw input
+    if name.lower() in alias_to_official:
+        return alias_to_official[name.lower()]
 
-    # Step 3: Pattern-based normalization rules
-    pattern_rules = [
-        # Cape Ann variants
-        (r".*Cape Ann.*", "Cape Ann Platform Tennis"),
-        # Myopia variants (Gold, Red, etc.)
-        (r"^Myopia\s+\w+$", "Myopia"),
-        # Essex variants (2M, 2T, etc.)
-        (r"^Essex\s+\d+\w*$", "Essex"),
-        # North Andover variants (2A, 2B, etc.)
-        (r"^North Andover\s+\d+\w*$", "North Andover"),
-    ]
+    # Strip trailing numbers (e.g. "Cape Ann 1" -> "Cape Ann")
+    stripped = re.sub(r'\s+\d+\w*\s*$', '', name).strip()
+    if stripped != name:
+        if stripped.lower() in official_names_lower:
+            return official_names_lower[stripped.lower()]
+        if stripped.lower() in alias_to_official:
+            return alias_to_official[stripped.lower()]
 
-    for pattern, club_name in pattern_rules:
-        if re.match(pattern, name, re.IGNORECASE):
-            return club_name
+    # Strip trailing word suffixes like team names ("Myopia Gold", "Cape Ann Cage Fighters")
+    # Try progressively shorter prefixes
+    words = stripped.split()
+    for i in range(len(words) - 1, 0, -1):
+        prefix = " ".join(words[:i])
+        if prefix.lower() in official_names_lower:
+            return official_names_lower[prefix.lower()]
+        if prefix.lower() in alias_to_official:
+            return alias_to_official[prefix.lower()]
 
-    return name
-
-
-async def normalize_user_club_input(club_name: str) -> str:
-    """
-    Normalize a user-entered club name to match canonical PTI roster club names.
-    Falls back to the original input for non-GBPTA clubs.
-    """
-    import re
-
-    if not club_name or not club_name.strip():
-        return club_name
-
-    name = club_name.strip()
-
-    # Get canonical club names from PTI roster
-    try:
-        canonical_clubs = await db.pti_roster.distinct("clubs")
-        # Flatten: clubs field contains lists
-        canonical_set = set()
-        for c in canonical_clubs:
-            if isinstance(c, list):
-                canonical_set.update(c)
-            elif c:
-                canonical_set.add(c)
-    except Exception:
-        canonical_set = set()
-
-    if not canonical_set:
-        return name
-
-    # 1. Exact match against canonical clubs
-    if name in canonical_set:
-        return name
-
-    # 2. Run existing normalize_club_name() and check
-    normalized = normalize_club_name(name)
-    if normalized in canonical_set:
-        return normalized
-
-    # 3. Strip common user suffixes and check
-    suffixes_to_strip = [
-        r"\s+Platform\s+Tennis\s+Club$",
-        r"\s+Platform\s+Tennis$",
-        r"\s+Paddle\s+Tennis\s+Club$",
-        r"\s+Paddle\s+Club$",
-        r"\s+Paddle$",
-        r"\s+PTC$",
-        r"\s+PT$",
-        r"\s+Club$",
-    ]
-
-    for suffix in suffixes_to_strip:
-        stripped = re.sub(suffix, "", name, flags=re.IGNORECASE).strip()
-        if stripped != name:
-            if stripped in canonical_set:
-                return stripped
-            # Also try normalize_club_name on the stripped version
-            stripped_normalized = normalize_club_name(stripped)
-            if stripped_normalized in canonical_set:
-                return stripped_normalized
-
-    # 4. Case-insensitive match against canonical clubs
-    name_lower = name.lower()
-    for canon in canonical_set:
-        if canon.lower() == name_lower:
-            return canon
-
-    # No match found - return original input (for non-GBPTA clubs)
+    # No match — return original input (non-GBPTA club)
     return name
 
 
@@ -250,6 +233,7 @@ async def run_gbpta_full_sync():
         async with httpx.AsyncClient(timeout=30.0, headers=headers, follow_redirects=True) as http_client:
             for club in clubs:
                 try:
+                    resolved_club = await resolve_club_name(club['name'])
                     response = await http_client.get(club['roster_url'])
                     response.raise_for_status()
                     soup = BeautifulSoup(response.text, 'html.parser')
@@ -278,7 +262,7 @@ async def run_gbpta_full_sync():
                                             'player_name': player_name,
                                             'pti_value': pti_value,
                                             'profile_source_url': profile_url,
-                                            'club': normalize_club_name(club['name'])
+                                            'club': resolved_club
                                         })
                 except Exception as e:
                     logger.error(f"Error scraping {club['name']}: {e}")
@@ -365,6 +349,7 @@ async def lifespan(app: FastAPI):
     )
     scheduler.start()
     logger.info("Scheduler started - GBPTA sync scheduled for Tuesdays at 6:00 AM EST")
+    await seed_club_directory()
     yield
     scheduler.shutdown()
     logger.info("Scheduler stopped")
@@ -815,11 +800,11 @@ async def get_me(current_player: dict = Depends(get_current_player)):
 
 @api_router.put("/auth/complete-profile")
 async def complete_profile(profile: PlayerProfile, current_player: dict = Depends(get_current_player)):
-    # Normalize club names to match canonical PTI roster names
-    normalized_home_club = await normalize_user_club_input(profile.home_club) if profile.home_club else profile.home_club
+    # Resolve club names to official GBPTA names
+    normalized_home_club = await resolve_club_name(profile.home_club) if profile.home_club else profile.home_club
     normalized_other_clubs = []
     for club in (profile.other_clubs or []):
-        normalized_other_clubs.append(await normalize_user_club_input(club))
+        normalized_other_clubs.append(await resolve_club_name(club))
 
     update_data = {
         "name": profile.name,
@@ -879,11 +864,11 @@ async def update_player(player_id: str, data: PlayerUpdate, current_player: dict
     if existing_player and existing_player.get('pti_verified') and 'pti' in update_data:
         del update_data['pti']
 
-    # Normalize club names to match canonical PTI roster names
+    # Resolve club names to official GBPTA names
     if 'home_club' in update_data and update_data['home_club']:
-        update_data['home_club'] = await normalize_user_club_input(update_data['home_club'])
+        update_data['home_club'] = await resolve_club_name(update_data['home_club'])
     if 'other_clubs' in update_data and update_data['other_clubs']:
-        update_data['other_clubs'] = [await normalize_user_club_input(c) for c in update_data['other_clubs']]
+        update_data['other_clubs'] = [await resolve_club_name(c) for c in update_data['other_clubs']]
 
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     
@@ -2379,10 +2364,12 @@ async def deduplicate_pti_roster(current_player: dict = Depends(get_current_play
                     'profile_image_url': None  # No images on paddlescores
                 }
 
-            # Add club to list if not already there
+            # Add club to list if not already there (resolve to official name)
             club = entry.get('club')
-            if club and club not in player_map[name]['clubs']:
-                player_map[name]['clubs'].append(club)
+            if club:
+                club = await resolve_club_name(club)
+                if club not in player_map[name]['clubs']:
+                    player_map[name]['clubs'].append(club)
 
             # Use latest PTI value if present
             if entry.get('pti_value') is not None:
@@ -2903,6 +2890,63 @@ async def scrape_tenniscores_player(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.post("/admin/migrate-club-names")
+async def migrate_club_names(current_player: dict = Depends(get_current_player)):
+    """
+    One-time migration: map old short club names to official GBPTA names
+    in pti_roster.clubs, players.home_club, and players.other_clubs.
+    """
+    # Build alias -> official name mapping
+    entries = await db.club_directory.find({}, {"_id": 0}).to_list(100)
+    alias_map = {}
+    for e in entries:
+        for alias in e.get("aliases", []):
+            alias_map[alias.lower()] = e["name"]
+        # Also map official name to itself (for case normalization)
+        alias_map[e["name"].lower()] = e["name"]
+
+    def resolve(name):
+        if not name:
+            return name
+        return alias_map.get(name.strip().lower(), name.strip())
+
+    stats = {"pti_roster_updated": 0, "players_home_club_updated": 0, "players_other_clubs_updated": 0}
+
+    # Migrate pti_roster.clubs
+    roster_docs = await db.pti_roster.find({}, {"_id": 0, "id": 1, "clubs": 1}).to_list(10000)
+    for doc in roster_docs:
+        old_clubs = doc.get("clubs", [])
+        new_clubs = [resolve(c) for c in old_clubs]
+        if new_clubs != old_clubs:
+            await db.pti_roster.update_one({"id": doc["id"]}, {"$set": {"clubs": new_clubs}})
+            stats["pti_roster_updated"] += 1
+
+    # Migrate players.home_club
+    players = await db.players.find(
+        {"home_club": {"$exists": True, "$ne": None}},
+        {"_id": 0, "id": 1, "home_club": 1, "other_clubs": 1}
+    ).to_list(10000)
+    for player in players:
+        updates = {}
+        old_home = player.get("home_club")
+        new_home = resolve(old_home)
+        if new_home != old_home:
+            updates["home_club"] = new_home
+            stats["players_home_club_updated"] += 1
+
+        old_other = player.get("other_clubs", [])
+        if old_other:
+            new_other = [resolve(c) for c in old_other]
+            if new_other != old_other:
+                updates["other_clubs"] = new_other
+                stats["players_other_clubs_updated"] += 1
+
+        if updates:
+            await db.players.update_one({"id": player["id"]}, {"$set": updates})
+
+    return {"message": "Club name migration complete", "stats": stats}
+
+
 @api_router.get("/players/{player_id}/match-history")
 async def get_player_match_history(
     player_id: str,
@@ -3153,21 +3197,13 @@ async def get_clubs_with_details(current_player: dict = Depends(get_current_play
 
 @api_router.get("/clubs/suggestions")
 async def get_club_suggestions(current_player: dict = Depends(get_current_player)):
-    """Get known clubs for autocomplete, prioritizing PTI roster clubs"""
-    all_clubs = set()
+    """Get known clubs for autocomplete — official GBPTA names plus any non-GBPTA player-entered clubs"""
+    # Official names from club directory
+    entries = await db.club_directory.find({}, {"_id": 0, "name": 1}).to_list(100)
+    official_names = {e["name"] for e in entries}
+    all_clubs = set(official_names)
 
-    # Primary source: canonical clubs from PTI roster
-    try:
-        roster_clubs = await db.pti_roster.distinct("clubs")
-        for c in roster_clubs:
-            if isinstance(c, list):
-                all_clubs.update(c)
-            elif c:
-                all_clubs.add(c)
-    except Exception:
-        pass
-
-    # Secondary source: player-entered clubs
+    # Add non-GBPTA player-entered clubs
     home_clubs = await db.players.distinct("home_club")
     other_clubs = await db.players.distinct("other_clubs")
 
@@ -3182,7 +3218,6 @@ async def get_club_suggestions(current_player: dict = Depends(get_current_player
         elif clubs:
             all_clubs.add(clubs)
 
-    # Remove empty strings
     all_clubs.discard("")
 
     return sorted(list(all_clubs))

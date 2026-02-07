@@ -75,16 +75,16 @@ API route groups: `/api/auth/*`, `/api/players/*`, `/api/crews/*`, `/api/request
 - `pti_roster_raw` - Raw scraped roster data
 - `pti_history` - Historical PTI snapshots for trend tracking
 - `clubs` - Club metadata from GBPTA scraping
+- `club_directory` - Official GBPTA club names with aliases (seeded on startup)
 - `invites` - Player invite records
 
-## Club Name Normalization
+## Club Name Resolution
 
-User-entered club names are normalized against canonical PTI roster names at save time.
+Official GBPTA club names (27 clubs) are the single source of truth, stored in a `club_directory` collection seeded on startup from `CLUB_DIRECTORY` in server.py (~line 64). Each entry has a `name` (official) and `aliases` (old short names, abbreviations, scraped team-name prefixes).
 
-- `normalize_club_name()` (~line 60) - Extracts base club name from GBPTA team names (e.g., "Cape Ann Cage Fighters" → "Cape Ann", "TCC" → "The Country Club")
-- `normalize_user_club_input()` (~line 106) - Async function that normalizes free-text user input against `pti_roster.distinct("clubs")`. Tries exact match, then `normalize_club_name()`, then strips common suffixes ("Platform Tennis Club", "Paddle Club", "PTC", etc.), then case-insensitive match. Returns original input for non-GBPTA clubs.
-- Applied in `complete_profile` and `update_player` endpoints
-- `POST /api/admin/normalize-clubs` - One-time migration endpoint for existing data
+- `resolve_club_name()` (~line 106) - Async function that resolves scraped team names or user input to official names via DB-backed alias lookup. Strips trailing numbers/suffixes, tries case-insensitive match against official names and aliases. Returns original input for non-GBPTA clubs.
+- Applied in `complete_profile`, `update_player` endpoints, and scraping pipeline
+- `POST /api/admin/migrate-club-names` - One-time migration for existing data (old short names → official names)
 
 ### Club Combobox Pattern
 Club selection uses Popover + Command (shadcn/ui) with `shouldFilter={true}` and an "Other (enter manually)" option. See `CreateAvailability.js` for the canonical pattern. Also used in `CompleteProfile.js` and `Profile.js`.
