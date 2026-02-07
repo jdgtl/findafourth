@@ -380,62 +380,26 @@ async def run_tenniscores_sync():
 
         logger.info(f"Tenniscores sync - Rankings: {inserted} inserted, {updated} updated")
 
-        # Step 2: Bulk scrape all player pages
-        logger.info("Tenniscores sync - Step 2: Bulk scraping player pages")
+        # Step 2: Bulk scrape all player pages with concurrent workers
+        logger.info(f"Tenniscores sync - Step 2: Bulk scraping player pages with {TENNISCORES_SCRAPE_WORKERS} workers")
         all_players = await db.tenniscores_players.find(
             {'profile_url': {'$exists': True, '$ne': None}},
             {'_id': 0}
         ).to_list(10000)
 
+        semaphore = asyncio.Semaphore(TENNISCORES_SCRAPE_WORKERS)
+        tasks = [_scrape_single_tenniscores_player(p, now, semaphore) for p in all_players]
+
         scraped = 0
         errors = 0
-        for i, ts_player in enumerate(all_players):
-            try:
-                name = ts_player.get('name', '')
-                normalized = ts_player.get('normalized_name', normalize_name(name))
-
-                player_html = await fetch_html(ts_player['profile_url'])
-                player_data = parse_tenniscores_player_page(player_html, name)
-                partner_stats = calculate_partner_stats(player_data['matches'], name)
-
-                await db.match_history.update_one(
-                    {'normalized_name': normalized},
-                    {
-                        '$set': {
-                            'player_name': name,
-                            'normalized_name': normalized,
-                            'current_pti': player_data['current_pti'],
-                            'matches': player_data['matches'],
-                            'match_count': len(player_data['matches']),
-                            'last_scraped': now
-                        }
-                    },
-                    upsert=True
-                )
-
-                await db.partner_stats.update_one(
-                    {'normalized_name': normalized},
-                    {
-                        '$set': {
-                            'player_name': name,
-                            'normalized_name': normalized,
-                            'partners': partner_stats,
-                            'last_calculated': now
-                        }
-                    },
-                    upsert=True
-                )
-
+        for i, coro in enumerate(asyncio.as_completed(tasks)):
+            success = await coro
+            if success:
                 scraped += 1
-                if (i + 1) % 50 == 0:
-                    logger.info(f"Tenniscores sync progress: {i + 1}/{len(all_players)} ({scraped} scraped, {errors} errors)")
-
-                await asyncio.sleep(1.5)
-
-            except Exception as e:
+            else:
                 errors += 1
-                logger.error(f"Tenniscores sync - Error scraping {ts_player.get('name', '?')}: {e}")
-                await asyncio.sleep(1.0)
+            if (i + 1) % 50 == 0:
+                logger.info(f"Tenniscores sync progress: {i + 1}/{len(all_players)} ({scraped} scraped, {errors} errors)")
 
         logger.info(f"Scheduled Tenniscores sync complete: {len(players)} rankings, {scraped}/{len(all_players)} player pages scraped, {errors} errors")
 
@@ -2714,6 +2678,7 @@ async def record_pti_history(current_player: dict = Depends(get_current_player))
 
 TENNISCORES_BASE_URL = "https://gbptl.tenniscores.com"
 TENNISCORES_RANKINGS_URL = f"{TENNISCORES_BASE_URL}/?mod=nndz-SkhmOW1PQ3V4Zz09"
+TENNISCORES_SCRAPE_WORKERS = 6  # Concurrent workers for bulk player page scraping
 
 
 def parse_tenniscores_rankings(html: str) -> List[dict]:
@@ -3290,10 +3255,60 @@ async def scrape_tenniscores_player(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def _scrape_single_tenniscores_player(ts_player: dict, now: str, semaphore: asyncio.Semaphore) -> bool:
+    """Scrape one Tenniscores player page under semaphore. Returns True on success."""
+    async with semaphore:
+        try:
+            name = ts_player.get('name', '')
+            normalized = ts_player.get('normalized_name', normalize_name(name))
+
+            html = await fetch_html(ts_player['profile_url'])
+            player_data = parse_tenniscores_player_page(html, name)
+            partner_stats = calculate_partner_stats(player_data['matches'], name)
+
+            await db.match_history.update_one(
+                {'normalized_name': normalized},
+                {
+                    '$set': {
+                        'player_name': name,
+                        'normalized_name': normalized,
+                        'current_pti': player_data['current_pti'],
+                        'matches': player_data['matches'],
+                        'match_count': len(player_data['matches']),
+                        'last_scraped': now
+                    }
+                },
+                upsert=True
+            )
+
+            await db.partner_stats.update_one(
+                {'normalized_name': normalized},
+                {
+                    '$set': {
+                        'player_name': name,
+                        'normalized_name': normalized,
+                        'partners': partner_stats,
+                        'last_calculated': now
+                    }
+                },
+                upsert=True
+            )
+
+            # Rate limiting per worker
+            await asyncio.sleep(1.5)
+            return True
+
+        except Exception as e:
+            logger.error(f"Error scraping Tenniscores player {ts_player.get('name', '?')}: {e}")
+            await asyncio.sleep(1.0)
+            return False
+
+
 @api_router.post("/admin/tenniscores/scrape-all-players")
 async def scrape_all_tenniscores_players(current_player: dict = Depends(get_current_player)):
     """
     Bulk scrape all Tenniscores player pages for match history.
+    Uses concurrent workers for faster throughput.
     Prerequisite: tenniscores_players must be populated via /admin/tenniscores/scrape-rankings.
     """
     try:
@@ -3305,59 +3320,24 @@ async def scrape_all_tenniscores_players(current_player: dict = Depends(get_curr
         if not all_players:
             return {"message": "No players found. Run /admin/tenniscores/scrape-rankings first.", "total": 0}
 
-        logger.info(f"Starting bulk Tenniscores scrape for {len(all_players)} players...")
+        logger.info(f"Starting bulk Tenniscores scrape for {len(all_players)} players with {TENNISCORES_SCRAPE_WORKERS} workers...")
         now = datetime.now(timezone.utc).isoformat()
+        semaphore = asyncio.Semaphore(TENNISCORES_SCRAPE_WORKERS)
+
+        # Launch all tasks concurrently, semaphore limits active workers
+        tasks = [_scrape_single_tenniscores_player(p, now, semaphore) for p in all_players]
+
+        # Log progress as tasks complete
         scraped = 0
         errors = 0
-
-        for i, ts_player in enumerate(all_players):
-            try:
-                name = ts_player.get('name', '')
-                normalized = ts_player.get('normalized_name', normalize_name(name))
-
-                html = await fetch_html(ts_player['profile_url'])
-                player_data = parse_tenniscores_player_page(html, name)
-                partner_stats = calculate_partner_stats(player_data['matches'], name)
-
-                await db.match_history.update_one(
-                    {'normalized_name': normalized},
-                    {
-                        '$set': {
-                            'player_name': name,
-                            'normalized_name': normalized,
-                            'current_pti': player_data['current_pti'],
-                            'matches': player_data['matches'],
-                            'match_count': len(player_data['matches']),
-                            'last_scraped': now
-                        }
-                    },
-                    upsert=True
-                )
-
-                await db.partner_stats.update_one(
-                    {'normalized_name': normalized},
-                    {
-                        '$set': {
-                            'player_name': name,
-                            'normalized_name': normalized,
-                            'partners': partner_stats,
-                            'last_calculated': now
-                        }
-                    },
-                    upsert=True
-                )
-
+        for i, coro in enumerate(asyncio.as_completed(tasks)):
+            success = await coro
+            if success:
                 scraped += 1
-                if (i + 1) % 50 == 0:
-                    logger.info(f"Tenniscores bulk scrape progress: {i + 1}/{len(all_players)} ({scraped} scraped, {errors} errors)")
-
-                # Rate limiting: 1-2 second delay between requests
-                await asyncio.sleep(1.5)
-
-            except Exception as e:
+            else:
                 errors += 1
-                logger.error(f"Error scraping Tenniscores player {ts_player.get('name', '?')}: {e}")
-                await asyncio.sleep(1.0)
+            if (i + 1) % 50 == 0:
+                logger.info(f"Tenniscores bulk scrape progress: {i + 1}/{len(all_players)} ({scraped} scraped, {errors} errors)")
 
         logger.info(f"Tenniscores bulk scrape complete: {scraped}/{len(all_players)} scraped, {errors} errors")
 
