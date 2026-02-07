@@ -337,6 +337,112 @@ async def run_gbpta_full_sync():
     except Exception as e:
         logger.error(f"Scheduled GBPTA sync failed: {e}")
 
+
+async def run_tenniscores_sync():
+    """
+    Execute the full Tenniscores sync pipeline.
+    Called by the scheduler on Tuesdays (after GBPTA sync).
+    Step 1: Scrape rankings page → upsert tenniscores_players
+    Step 2: Bulk scrape all individual player pages
+    """
+    logger.info("Starting scheduled Tenniscores sync...")
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Step 1: Scrape rankings
+        logger.info("Tenniscores sync - Step 1: Scraping rankings")
+        html = await fetch_html(TENNISCORES_RANKINGS_URL)
+        players = parse_tenniscores_rankings(html)
+        logger.info(f"Tenniscores sync - Found {len(players)} players in rankings")
+
+        inserted = 0
+        updated = 0
+        for player in players:
+            player['last_scraped'] = now
+            player['normalized_name'] = normalize_name(player['name'])
+            existing = await db.tenniscores_players.find_one({'normalized_name': player['normalized_name']})
+            if existing:
+                await db.tenniscores_players.update_one({'_id': existing['_id']}, {'$set': player})
+                updated += 1
+            else:
+                player['id'] = str(uuid.uuid4())
+                player['created_at'] = now
+                await db.tenniscores_players.insert_one(player)
+                inserted += 1
+
+        # Also update PTI values in pti_roster
+        for player in players:
+            if player['pti_current'] is not None:
+                await db.pti_roster.update_many(
+                    {'normalized_name': player['normalized_name']},
+                    {'$set': {'pti_value': player['pti_current'], 'pti_updated': now}}
+                )
+
+        logger.info(f"Tenniscores sync - Rankings: {inserted} inserted, {updated} updated")
+
+        # Step 2: Bulk scrape all player pages
+        logger.info("Tenniscores sync - Step 2: Bulk scraping player pages")
+        all_players = await db.tenniscores_players.find(
+            {'profile_url': {'$exists': True, '$ne': None}},
+            {'_id': 0}
+        ).to_list(10000)
+
+        scraped = 0
+        errors = 0
+        for i, ts_player in enumerate(all_players):
+            try:
+                name = ts_player.get('name', '')
+                normalized = ts_player.get('normalized_name', normalize_name(name))
+
+                player_html = await fetch_html(ts_player['profile_url'])
+                player_data = parse_tenniscores_player_page(player_html, name)
+                partner_stats = calculate_partner_stats(player_data['matches'], name)
+
+                await db.match_history.update_one(
+                    {'normalized_name': normalized},
+                    {
+                        '$set': {
+                            'player_name': name,
+                            'normalized_name': normalized,
+                            'current_pti': player_data['current_pti'],
+                            'matches': player_data['matches'],
+                            'match_count': len(player_data['matches']),
+                            'last_scraped': now
+                        }
+                    },
+                    upsert=True
+                )
+
+                await db.partner_stats.update_one(
+                    {'normalized_name': normalized},
+                    {
+                        '$set': {
+                            'player_name': name,
+                            'normalized_name': normalized,
+                            'partners': partner_stats,
+                            'last_calculated': now
+                        }
+                    },
+                    upsert=True
+                )
+
+                scraped += 1
+                if (i + 1) % 50 == 0:
+                    logger.info(f"Tenniscores sync progress: {i + 1}/{len(all_players)} ({scraped} scraped, {errors} errors)")
+
+                await asyncio.sleep(1.5)
+
+            except Exception as e:
+                errors += 1
+                logger.error(f"Tenniscores sync - Error scraping {ts_player.get('name', '?')}: {e}")
+                await asyncio.sleep(1.0)
+
+        logger.info(f"Scheduled Tenniscores sync complete: {len(players)} rankings, {scraped}/{len(all_players)} player pages scraped, {errors} errors")
+
+    except Exception as e:
+        logger.error(f"Scheduled Tenniscores sync failed: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifespan - start/stop scheduler"""
@@ -347,8 +453,15 @@ async def lifespan(app: FastAPI):
         id='gbpta_sync',
         replace_existing=True
     )
+    # Schedule Tenniscores sync for every Tuesday at 7:00 AM EST (12:00 UTC)
+    scheduler.add_job(
+        run_tenniscores_sync,
+        CronTrigger(day_of_week='tue', hour=12, minute=0),  # 12:00 UTC = 7:00 AM EST
+        id='tenniscores_sync',
+        replace_existing=True
+    )
     scheduler.start()
-    logger.info("Scheduler started - GBPTA sync scheduled for Tuesdays at 6:00 AM EST")
+    logger.info("Scheduler started - GBPTA sync at 6:00 AM EST, Tenniscores sync at 7:00 AM EST (Tuesdays)")
     await seed_club_directory()
     yield
     scheduler.shutdown()
@@ -2658,74 +2771,327 @@ def parse_tenniscores_rankings(html: str) -> List[dict]:
 
 def parse_tenniscores_player_page(html: str, player_name: str) -> dict:
     """
-    Parse a Tenniscores player page to extract match history and partner stats.
+    Parse a Tenniscores player page to extract rich match history.
+
+    Each match is a div.shader containing:
+    - div.rbox_top: result, date/event, player start/end rating
+    - div.rbox_bottom: players (4 links), scores, player/team ratings
+
+    Returns dict with player_name, current_pti, and matches list matching
+    the target structure in docs/tennis_scores_dataset.json.
     """
     soup = BeautifulSoup(html, 'html.parser')
 
-    result = {
+    parsed = {
         'player_name': player_name,
         'current_pti': None,
         'matches': [],
-        'partner_stats': []
     }
 
-    # Try to find current PTI
+    # Try to find current PTI from page header
     pti_elements = soup.find_all(string=lambda text: text and 'PTI' in text if text else False)
     for elem in pti_elements:
         parent = elem.parent
         if parent:
             text = parent.get_text()
-            # Look for pattern like "Current PTI: 35.1" or just a number near PTI
-            import re
             pti_match = re.search(r'[-]?\d+\.?\d*', text)
             if pti_match:
                 try:
-                    result['current_pti'] = float(pti_match.group())
+                    parsed['current_pti'] = float(pti_match.group())
                     break
                 except ValueError:
                     pass
 
-    # Find match history table(s)
-    # Matches typically have: W/L, Date, League, Partner, Opponents, Scores
-    tables = soup.find_all('table')
-    for table in tables:
-        rows = table.find_all('tr')
-        for row in rows:
-            cells = row.find_all('td')
-            if len(cells) >= 4:
-                # Try to identify match rows
-                first_cell_text = cells[0].get_text(strip=True).upper()
-                if first_cell_text in ['W', 'L', 'WIN', 'LOSS']:
-                    try:
-                        match_data = {
-                            'result': 'W' if 'W' in first_cell_text else 'L',
-                            'date': cells[1].get_text(strip=True) if len(cells) > 1 else '',
-                            'raw_data': [c.get_text(strip=True) for c in cells]
-                        }
+    normalized_subject = normalize_name(player_name)
 
-                        # Try to extract partner and opponents from links
-                        links = row.find_all('a')
-                        player_names = []
-                        for link in links:
-                            name = link.get_text(strip=True)
-                            if name and name != player_name:
-                                player_names.append(name)
+    # Each match is a div.shader
+    for shader in soup.find_all('div', class_='shader'):
+        try:
+            match_data = _parse_single_match(shader, normalized_subject)
+            if match_data:
+                parsed['matches'].append(match_data)
+        except Exception as e:
+            logger.debug(f"Failed to parse match block for {player_name}: {e}")
+            continue
 
-                        if player_names:
-                            match_data['partner'] = player_names[0] if len(player_names) >= 1 else None
-                            match_data['opponents'] = player_names[1:3] if len(player_names) > 1 else []
+    return parsed
 
-                        result['matches'].append(match_data)
-                    except Exception:
-                        continue
 
-    return result
+def _parse_single_match(shader, normalized_subject: str) -> dict | None:
+    """Parse a single div.shader match block into the target structure."""
+    rbox_top = shader.find('div', class_='rbox_top')
+    rbox_bottom = shader.find('div', class_='rbox_bottom')
+    if not rbox_top:
+        return None
+
+    # --- rbox_top: result, date/event, player rating ---
+    result_div = rbox_top.find('div', class_='rbox_1')
+    result_text = result_div.get_text(strip=True).upper() if result_div else ''
+    match_result = 'W' if result_text.startswith('W') else 'L'
+
+    # Date and event from rbox_inner divs
+    rbox_inners = rbox_top.find_all('div', class_='rbox_inner')
+    date_str = ''
+    event_str = ''
+    if len(rbox_inners) >= 1:
+        # First rbox_inner: date/time line
+        date_str = rbox_inners[0].get_text(strip=True)
+    if len(rbox_inners) >= 2:
+        # Second rbox_inner: event/league line
+        event_str = rbox_inners[1].get_text(strip=True)
+
+    # Player start/end rating from two separate div.rbox3top elements
+    rbox3tops = rbox_top.find_all('div', class_='rbox3top')
+    subject_rating_before = None
+    subject_rating_after = None
+    if len(rbox3tops) >= 1:
+        span = rbox3tops[0].find('span', class_='demi')
+        if span:
+            subject_rating_before = _safe_float(span.get_text(strip=True))
+    if len(rbox3tops) >= 2:
+        span = rbox3tops[1].find('span', class_='demi')
+        if span:
+            subject_rating_after = _safe_float(span.get_text(strip=True))
+
+    # Parse event string for venue, line number, teams
+    venue, line_num, home_team, away_team = _parse_event_string(event_str)
+
+    # --- rbox_bottom: players, scores, ratings ---
+    players = []       # 4 player names: H1, H2, A1, A2
+    score_data = []
+    player_start_ratings = []   # H1, H2, A1, A2 start ratings
+    player_end_ratings = []     # H1, H2, A1, A2 end ratings
+    team_start_ratings = []     # Home, Away team start
+    team_end_ratings = []       # Home, Away team end
+
+    if rbox_bottom:
+        # Player names from rbox_wrap_2 links
+        wrap2 = rbox_bottom.find('div', class_='rbox_wrap_2')
+        if wrap2:
+            links = wrap2.find_all('a')
+            players = [link.get_text(strip=True) for link in links[:4]]
+
+        # Scores from rbox_wrap_4
+        wrap4 = rbox_bottom.find('div', class_='rbox_wrap_4')
+        if wrap4:
+            score_data = _parse_scores(wrap4)
+
+        # Player ratings from rbox_wrap_3 (appears twice: start then end)
+        wrap3_all = rbox_bottom.find_all('div', class_='rbox_wrap_3')
+        if len(wrap3_all) >= 1:
+            player_start_ratings = _extract_ratings(wrap3_all[0])
+        if len(wrap3_all) >= 2:
+            player_end_ratings = _extract_ratings(wrap3_all[1])
+
+        # Team ratings from rbox_wrap_5 (appears twice: start then end)
+        wrap5_all = rbox_bottom.find_all('div', class_='rbox_wrap_5')
+        if len(wrap5_all) >= 1:
+            team_start_ratings = _extract_ratings(wrap5_all[0])
+        if len(wrap5_all) >= 2:
+            team_end_ratings = _extract_ratings(wrap5_all[1])
+
+    # Identify which side the subject is on (home=0,1 or away=2,3)
+    subject_idx = None
+    for i, name in enumerate(players):
+        if normalize_name(name) == normalized_subject:
+            subject_idx = i
+            break
+
+    if subject_idx is None and players:
+        # Fallback: partial match on last name
+        subject_parts = normalized_subject.split()
+        for i, name in enumerate(players):
+            if subject_parts[-1] in normalize_name(name):
+                subject_idx = i
+                break
+
+    is_home = subject_idx is not None and subject_idx < 2
+    partner_idx = None
+    opp_indices = []
+
+    if subject_idx is not None:
+        if is_home:
+            partner_idx = 1 if subject_idx == 0 else 0
+            opp_indices = [2, 3]
+            venue = venue or 'Home'
+        else:
+            partner_idx = 3 if subject_idx == 2 else 2
+            opp_indices = [0, 1]
+            venue = venue or 'Away'
+
+    # Build the match structure
+    match = {
+        'result': match_result,
+        'date': date_str,
+        'event': event_str,
+        'venue': venue or '',
+        'line': line_num,
+        'rating_before': subject_rating_before,
+        'rating_after': subject_rating_after,
+    }
+
+    # Partner
+    if partner_idx is not None and partner_idx < len(players):
+        match['partner'] = {
+            'name': players[partner_idx],
+            'rating_before': player_start_ratings[partner_idx] if partner_idx < len(player_start_ratings) else None,
+            'rating_after': player_end_ratings[partner_idx] if partner_idx < len(player_end_ratings) else None,
+        }
+    else:
+        match['partner'] = None
+
+    # Team ratings for subject's side
+    if is_home:
+        match['team_rating_before'] = team_start_ratings[0] if len(team_start_ratings) >= 1 else None
+        match['team_rating_after'] = team_end_ratings[0] if len(team_end_ratings) >= 1 else None
+    else:
+        match['team_rating_before'] = team_start_ratings[1] if len(team_start_ratings) >= 2 else None
+        match['team_rating_after'] = team_end_ratings[1] if len(team_end_ratings) >= 2 else None
+
+    # Opponents
+    if opp_indices and all(i < len(players) for i in opp_indices):
+        opp_team = away_team if is_home else home_team
+        opp = {
+            'team': opp_team or '',
+            'player_1': {
+                'name': players[opp_indices[0]],
+                'rating_before': player_start_ratings[opp_indices[0]] if opp_indices[0] < len(player_start_ratings) else None,
+                'rating_after': player_end_ratings[opp_indices[0]] if opp_indices[0] < len(player_end_ratings) else None,
+            },
+            'player_2': {
+                'name': players[opp_indices[1]],
+                'rating_before': player_start_ratings[opp_indices[1]] if opp_indices[1] < len(player_start_ratings) else None,
+                'rating_after': player_end_ratings[opp_indices[1]] if opp_indices[1] < len(player_end_ratings) else None,
+            },
+            'team_rating_before': team_start_ratings[1] if is_home and len(team_start_ratings) >= 2 else (team_start_ratings[0] if not is_home and len(team_start_ratings) >= 1 else None),
+            'team_rating_after': team_end_ratings[1] if is_home and len(team_end_ratings) >= 2 else (team_end_ratings[0] if not is_home and len(team_end_ratings) >= 1 else None),
+            'venue': 'Away' if is_home else 'Home',
+        }
+        match['opponent'] = [opp]
+    else:
+        match['opponent'] = []
+
+    # Scores
+    match['score'] = score_data if score_data else []
+
+    return match
+
+
+def _parse_event_string(event: str) -> tuple:
+    """
+    Parse event string like "North Shore: Division 1 - Myopia Red vs Cape Ann 2  at Line 7"
+    Returns (venue_hint, line_number, home_team, away_team).
+    venue_hint is None here — determined by subject's position in player list.
+    """
+    venue_hint = None
+    line_num = None
+    home_team = None
+    away_team = None
+
+    # Extract line number: "at Line 7"
+    line_match = re.search(r'at\s+[Ll]ine\s*(\d+)', event)
+    if line_match:
+        line_num = int(line_match.group(1))
+
+    # Extract teams from "X vs Y" pattern (after colon if present)
+    vs_part = event.split(':', 1)[-1].strip() if ':' in event else event
+    # Strip "at Line N" suffix before parsing teams
+    vs_part = re.sub(r'\s+at\s+[Ll]ine\s*\d+', '', vs_part).strip()
+    # Strip division prefix like "Division 1 - " or "2020 RMPL Division 2 - "
+    vs_part = re.sub(r'^(?:[\w\s]+\s)?Division\s+\d+\s*-\s*', '', vs_part).strip()
+    vs_match = re.match(r'(.+?)\s+vs\.?\s+(.+)', vs_part, re.IGNORECASE)
+    if vs_match:
+        home_team = vs_match.group(1).strip()
+        away_team = vs_match.group(2).strip()
+
+    return venue_hint, line_num, home_team, away_team
+
+
+def _parse_scores(wrap4) -> list:
+    """
+    Parse set scores from rbox_wrap_4.
+    Structure: rboxtop, clearfix, home scores (rbox_4_set), clearfix, away scores (rbox_4_set), clearfix.
+    Scores are grouped into rows separated by clearfix divs.
+    Returns list with single dict of set_1, set_2, optionally set_3.
+    """
+    # Collect score rows: groups of rbox_4_set values between clearfix divs
+    rows = []
+    current_row = []
+
+    for child in wrap4.children:
+        if not hasattr(child, 'get'):
+            continue
+        classes = child.get('class', [])
+        if 'clearfix' in classes:
+            if current_row:
+                rows.append(current_row)
+                current_row = []
+            continue
+        if 'rbox_4_set' in classes:
+            val = _safe_int(child.get_text(strip=True))
+            if val is not None:
+                current_row.append(val)
+    if current_row:
+        rows.append(current_row)
+
+    # First score row = home, second = away
+    home_scores = rows[0] if len(rows) >= 1 else []
+    away_scores = rows[1] if len(rows) >= 2 else []
+
+    if not home_scores and not away_scores:
+        return []
+
+    sets = {}
+    for i in range(max(len(home_scores), len(away_scores))):
+        set_key = f'set_{i + 1}'
+        sets[set_key] = {
+            'home': home_scores[i] if i < len(home_scores) else None,
+            'away': away_scores[i] if i < len(away_scores) else None,
+        }
+
+    return [sets] if sets else []
+
+
+def _extract_ratings(wrap_div) -> list:
+    """
+    Extract numeric ratings from a rbox_wrap_3 or rbox_wrap_5 div.
+    Player ratings use div.rboxhalf.rbox_3, team ratings use div.rbox.rbox_5.
+    """
+    ratings = []
+    # Try rbox_3 (player ratings) and rbox_5 (team ratings)
+    for div in wrap_div.find_all('div', class_=['rbox_3', 'rbox_5']):
+        # Skip header divs (rboxtop)
+        if 'rboxtop' in (div.get('class', [])):
+            continue
+        text = div.get_text(strip=True)
+        if text:
+            val = _safe_float(text)
+            if val is not None:
+                ratings.append(val)
+    return ratings
+
+
+def _safe_float(text: str):
+    """Convert text to float, returning None on failure."""
+    try:
+        return float(text)
+    except (ValueError, TypeError):
+        return None
+
+
+def _safe_int(text: str):
+    """Convert text to int, returning None on failure."""
+    try:
+        return int(text)
+    except (ValueError, TypeError):
+        return None
 
 
 def calculate_partner_stats(matches: List[dict], player_name: str) -> List[dict]:
     """
     Calculate partner chemistry stats from match history.
-    Returns list of partners with win rate, matches played, etc.
+    Returns list of partners with win rate, matches played, avg_partner_rating, etc.
+    Partner field may be a dict {name, rating_before, rating_after} or a plain string.
     """
     partner_data = {}
 
@@ -2734,24 +3100,40 @@ def calculate_partner_stats(matches: List[dict], player_name: str) -> List[dict]
         if not partner:
             continue
 
-        if partner not in partner_data:
-            partner_data[partner] = {
-                'partner_name': partner,
+        # Handle both dict partner (new format) and string partner (legacy)
+        if isinstance(partner, dict):
+            partner_name = partner.get('name', '')
+            partner_rating = partner.get('rating_before')
+        else:
+            partner_name = partner
+            partner_rating = None
+
+        if not partner_name:
+            continue
+
+        if partner_name not in partner_data:
+            partner_data[partner_name] = {
+                'partner_name': partner_name,
                 'matches_played': 0,
                 'wins': 0,
-                'losses': 0
+                'losses': 0,
+                'ratings': [],
             }
 
-        partner_data[partner]['matches_played'] += 1
+        partner_data[partner_name]['matches_played'] += 1
         if match.get('result') == 'W':
-            partner_data[partner]['wins'] += 1
+            partner_data[partner_name]['wins'] += 1
         else:
-            partner_data[partner]['losses'] += 1
+            partner_data[partner_name]['losses'] += 1
+        if partner_rating is not None:
+            partner_data[partner_name]['ratings'].append(partner_rating)
 
-    # Calculate win rates and sort by matches played
+    # Calculate win rates, avg rating, and sort by matches played
     partner_stats = []
-    for partner, stats in partner_data.items():
+    for partner_name, stats in partner_data.items():
         stats['win_rate'] = round(stats['wins'] / stats['matches_played'] * 100, 1) if stats['matches_played'] > 0 else 0
+        ratings = stats.pop('ratings')
+        stats['avg_partner_rating'] = round(sum(ratings) / len(ratings), 1) if ratings else None
         partner_stats.append(stats)
 
     partner_stats.sort(key=lambda x: x['matches_played'], reverse=True)
@@ -2829,6 +3211,7 @@ async def scrape_tenniscores_player(
 ):
     """
     Scrape a specific player's Tenniscores page to get their match history.
+    Any authenticated user can call this. Rate limited to once per 24 hours per player.
     """
     try:
         # Find the player in tenniscores_players
@@ -2837,6 +3220,23 @@ async def scrape_tenniscores_player(
 
         if not ts_player or not ts_player.get('profile_url'):
             raise HTTPException(status_code=404, detail="Player not found in Tenniscores data. Run rankings scrape first.")
+
+        # Check 24h rate limit
+        existing_history = await db.match_history.find_one(
+            {'normalized_name': normalized},
+            {'_id': 0, 'last_scraped': 1}
+        )
+        if existing_history and existing_history.get('last_scraped'):
+            last_scraped = datetime.fromisoformat(existing_history['last_scraped'])
+            cooldown = timedelta(hours=24)
+            next_available = last_scraped + cooldown
+            now_utc = datetime.now(timezone.utc)
+            if now_utc < next_available:
+                hours_remaining = (next_available - now_utc).total_seconds() / 3600
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"This player's data was refreshed recently. Next refresh available in {hours_remaining:.1f} hours ({next_available.strftime('%b %d at %I:%M %p')} UTC)."
+                )
 
         logger.info(f"Scraping Tenniscores player page for {player_name}...")
         html = await fetch_html(ts_player['profile_url'])
@@ -2887,6 +3287,89 @@ async def scrape_tenniscores_player(
         raise
     except Exception as e:
         logger.error(f"Error scraping Tenniscores player: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/admin/tenniscores/scrape-all-players")
+async def scrape_all_tenniscores_players(current_player: dict = Depends(get_current_player)):
+    """
+    Bulk scrape all Tenniscores player pages for match history.
+    Prerequisite: tenniscores_players must be populated via /admin/tenniscores/scrape-rankings.
+    """
+    try:
+        all_players = await db.tenniscores_players.find(
+            {'profile_url': {'$exists': True, '$ne': None}},
+            {'_id': 0}
+        ).to_list(10000)
+
+        if not all_players:
+            return {"message": "No players found. Run /admin/tenniscores/scrape-rankings first.", "total": 0}
+
+        logger.info(f"Starting bulk Tenniscores scrape for {len(all_players)} players...")
+        now = datetime.now(timezone.utc).isoformat()
+        scraped = 0
+        errors = 0
+
+        for i, ts_player in enumerate(all_players):
+            try:
+                name = ts_player.get('name', '')
+                normalized = ts_player.get('normalized_name', normalize_name(name))
+
+                html = await fetch_html(ts_player['profile_url'])
+                player_data = parse_tenniscores_player_page(html, name)
+                partner_stats = calculate_partner_stats(player_data['matches'], name)
+
+                await db.match_history.update_one(
+                    {'normalized_name': normalized},
+                    {
+                        '$set': {
+                            'player_name': name,
+                            'normalized_name': normalized,
+                            'current_pti': player_data['current_pti'],
+                            'matches': player_data['matches'],
+                            'match_count': len(player_data['matches']),
+                            'last_scraped': now
+                        }
+                    },
+                    upsert=True
+                )
+
+                await db.partner_stats.update_one(
+                    {'normalized_name': normalized},
+                    {
+                        '$set': {
+                            'player_name': name,
+                            'normalized_name': normalized,
+                            'partners': partner_stats,
+                            'last_calculated': now
+                        }
+                    },
+                    upsert=True
+                )
+
+                scraped += 1
+                if (i + 1) % 50 == 0:
+                    logger.info(f"Tenniscores bulk scrape progress: {i + 1}/{len(all_players)} ({scraped} scraped, {errors} errors)")
+
+                # Rate limiting: 1-2 second delay between requests
+                await asyncio.sleep(1.5)
+
+            except Exception as e:
+                errors += 1
+                logger.error(f"Error scraping Tenniscores player {ts_player.get('name', '?')}: {e}")
+                await asyncio.sleep(1.0)
+
+        logger.info(f"Tenniscores bulk scrape complete: {scraped}/{len(all_players)} scraped, {errors} errors")
+
+        return {
+            "message": "Bulk Tenniscores scrape complete",
+            "total": len(all_players),
+            "scraped": scraped,
+            "errors": errors
+        }
+
+    except Exception as e:
+        logger.error(f"Error in bulk Tenniscores scrape: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

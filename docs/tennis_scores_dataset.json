@@ -1,0 +1,46 @@
+{
+     "result": "W",
+     "date": "01/12/2026",
+     "event": "North Shore Div 1: Myopia Red vs Cape Ann 2",
+     "venue": "Away",
+     "line": 7,
+     "rating_before": 35.1,
+     "rating_after": 35.1,
+     "partner": {
+        "name": "Matt Whitlock",
+        "rating_before": 33.4,
+        "rating_after": 33.3
+     },
+     "team_rating_before": 68.5,
+     "team_rating_after": 68.4,
+     "opponent": [
+        {
+            "team": "Myopia Red",
+            "player_1": {
+                "name": "Joe Harris",
+                "rating_before": 49.9,
+                "rating_after":  49.8
+            },
+            "player_2": {
+                "name": "Andrew Dana",
+                "rating_before": 45.4,
+                "rating_after":  45.5
+            },
+            "team_rating_before": 95.4,
+            "team_rating_after": 95.4,
+            "venue": "Home"
+        }
+     ],
+     "score": [
+        {
+            "set_1": {
+                "home": 5,
+                "away": 7
+            },
+            "set_2": {
+                "home": 1,
+                "away": 6
+            }
+        }
+    ]
+ }

@@ -63,6 +63,7 @@ export const playerAPI = {
 export const tenniscoresAPI = {
   scrapeRankings: () => api.post('/admin/tenniscores/scrape-rankings'),
   scrapePlayer: (playerName) => api.post(`/admin/tenniscores/scrape-player/${encodeURIComponent(playerName)}`),
+  scrapeAllPlayers: () => api.post('/admin/tenniscores/scrape-all-players'),
 };
 
 // Request APIs
