@@ -17,9 +17,7 @@ services:
     restart: unless-stopped
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ghcr.io/jdgtl/findafourth/backend:latest
     container_name: findafourth-backend
     ports:
       - "8000:8000"
