@@ -3293,38 +3293,6 @@ async def get_club(club_id: str, current_player: dict = Depends(get_current_play
     }
 
 
-@api_router.post("/admin/normalize-clubs")
-async def admin_normalize_clubs(current_player: dict = Depends(get_current_player)):
-    """One-time migration: normalize all player club names against PTI roster."""
-    players = await db.players.find({}, {"_id": 0}).to_list(None)
-    updated_count = 0
-
-    for p in players:
-        changes = {}
-        if p.get("home_club"):
-            normalized = await normalize_user_club_input(p["home_club"])
-            if normalized != p["home_club"]:
-                changes["home_club"] = normalized
-
-        if p.get("other_clubs"):
-            normalized_others = []
-            changed = False
-            for club in p["other_clubs"]:
-                n = await normalize_user_club_input(club)
-                normalized_others.append(n)
-                if n != club:
-                    changed = True
-            if changed:
-                changes["other_clubs"] = normalized_others
-
-        if changes:
-            changes["updated_at"] = datetime.now(timezone.utc).isoformat()
-            await db.players.update_one({"id": p["id"]}, {"$set": changes})
-            updated_count += 1
-            logger.info(f"Normalized clubs for {p.get('name', p['id'])}: {changes}")
-
-    return {"updated_count": updated_count, "total_players": len(players)}
-
 @api_router.get("/")
 async def root():
     return {"message": "FindaFourth API", "version": "1.0.0"}
