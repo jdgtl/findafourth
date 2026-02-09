@@ -48,7 +48,7 @@ function Hero({ onGetStarted }) {
       <div className="relative z-10 max-w-6xl mx-auto px-6 pt-28 pb-20 grid lg:grid-cols-2 gap-16 items-center">
         <div>
           <h1 className="text-5xl md:text-7xl leading-tight mb-6" style={{ fontFamily: serif, color: colors.warm, lineHeight: 1.05 }}>
-            Texts. Calls.<br />Emails. Crickets.
+            Texts. Calls.<br /><span className="whitespace-nowrap">Emails. Crickets.</span>
             <span className="block mt-2" style={{ background: "linear-gradient(135deg, #34d399, #6ee7b7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>There's a better way.</span>
           </h1>
           <p className="text-lg leading-relaxed mb-10 max-w-lg text-warm-muted">One request. The right players notified. Spots filled and confirmed — before you've even laced up your shoes.</p>
@@ -87,7 +87,7 @@ function Hero({ onGetStarted }) {
                 </div>
               </div>
             </div>
-            <div className="absolute -top-4 -right-8 bg-white rounded-2xl p-3 shadow-xl border border-gray-100 w-56" style={{ animation: "floatIn 0.8s ease 1s both" }}>
+            <div className="absolute -top-20 -right-8 bg-white rounded-2xl p-3 shadow-xl border border-gray-100 w-56" style={{ animation: "floatIn 0.8s ease 1s both" }}>
               <div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold">4</div><div><div className="text-xs font-semibold text-gray-900">Mike T. needs 1 more</div><div className="text-gray-500" style={{ fontSize: 10 }}>Cape Ann PT · Tonight 7 PM</div></div></div>
             </div>
             <div className="absolute -bottom-6 -left-12 bg-emerald-600 text-white rounded-2xl px-4 py-2.5 shadow-xl" style={{ animation: "floatIn 0.8s ease 1.5s both" }}>
