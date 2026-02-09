@@ -148,7 +148,7 @@ const RequestCard = ({ request, isOrganizer, myResponse, onRespond, onClick }) =
             <div className="flex items-center gap-2 mt-3">
               <Avatar className="w-6 h-6">
                 <AvatarImage src={getProfileImageUrl(request.organizer?.profile_image_url)} />
-                <AvatarFallback className="bg-gray-200 text-gray-600 text-xs">
+                <AvatarFallback className="bg-gray-200 dark:bg-emerald-900/30 text-gray-600 dark:text-emerald-400 text-xs">
                   {getInitials(request.organizer?.name)}
                 </AvatarFallback>
               </Avatar>

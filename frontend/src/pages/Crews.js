@@ -31,10 +31,11 @@ const Crews = () => {
     <AppLayout>
       <div className="max-w-2xl mx-auto space-y-6" data-testid="crews-page">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Crews</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-warm font-serif">Crews</h1>
           <Button
             onClick={() => navigate('/crews/new')}
-            className="bg-emerald-600 hover:bg-emerald-700"
+            className="rounded-full text-night font-semibold hover:scale-105 transition-all"
+            style={{ background: 'linear-gradient(135deg, #34d399, #059669)' }}
             data-testid="create-crew-btn"
           >
             <Plus className="w-4 h-4 mr-2" />

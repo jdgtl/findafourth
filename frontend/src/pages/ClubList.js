@@ -121,7 +121,7 @@ const ClubList = () => {
 
             {/* Header with count */}
             <div className="flex items-center justify-between pt-2">
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Clubs</h1>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-warm font-serif">Clubs</h1>
               <Badge variant="secondary" className="text-sm">
                 {filteredClubs.length} club{filteredClubs.length !== 1 ? 's' : ''}
               </Badge>

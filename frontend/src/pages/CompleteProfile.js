@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/popover';
 import { Loader2, X, Info, Check, Search, ChevronDown, Shield, Building2, ChevronsUpDown, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { WireMeshBg, GlowOrb } from '@/components/MarketingEffects';
 
 // US Flag icon — monochrome, matches muted input text
 const USFlag = ({ className }) => (
@@ -62,8 +63,8 @@ const AnimatedStep = ({ text, isActive, isExiting }) => {
     >
       <div className="text-center">
         <div className="flex items-center justify-center gap-3">
-          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-          <span className="text-lg font-medium text-gray-700">{text}</span>
+          <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+          <span className="text-lg font-medium text-warm">{text}</span>
         </div>
       </div>
     </div>
@@ -291,7 +292,7 @@ const CompleteProfile = () => {
   const renderPtiLookup = () => {
     if (ptiLookupState === 'searching') {
       return (
-        <div className="mt-4 p-6 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border border-gray-200 shadow-inner">
+        <div className="mt-4 p-6 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
           <div className="relative h-16 overflow-hidden">
             {searchSteps.map((step, index) => (
               <AnimatedStep
@@ -309,28 +310,28 @@ const CompleteProfile = () => {
     if (ptiLookupState === 'found' && ptiMatch) {
       const matchedClubs = ptiMatch.clubs || [];
       return (
-        <div className="mt-4 p-6 bg-gradient-to-br from-emerald-50 to-green-50 rounded-xl border border-emerald-200 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="mt-4 p-6 rounded-xl animate-in fade-in slide-in-from-top-4 duration-500" style={{ background: 'rgba(52,211,153,0.06)', border: '1px solid rgba(52,211,153,0.2)' }}>
           <div className="flex items-center gap-2 mb-4">
             <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center">
               <Check className="w-5 h-5 text-white" />
             </div>
-            <span className="text-emerald-700 font-semibold">We found your APTA rating!</span>
+            <span className="text-emerald-400 font-semibold">We found your APTA rating!</span>
           </div>
 
-          <div className="bg-white rounded-lg p-4 border border-emerald-200 mb-4">
+          <div className="rounded-lg p-4 mb-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-lg font-bold text-gray-900">{ptiMatch.player_name}</p>
-                <p className="text-sm text-gray-500">APTA Verified Rating</p>
+                <p className="text-lg font-bold text-warm">{ptiMatch.player_name}</p>
+                <p className="text-sm text-warm-muted">APTA Verified Rating</p>
               </div>
               <div className="text-right">
-                <p className="text-3xl font-bold text-emerald-600">{ptiMatch.pti_value}</p>
-                <p className="text-xs text-gray-500 uppercase tracking-wide">PTI</p>
+                <p className="text-3xl font-bold text-emerald-400">{ptiMatch.pti_value}</p>
+                <p className="text-xs text-warm-muted uppercase tracking-wide">PTI</p>
               </div>
             </div>
             {matchedClubs.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-gray-100">
-                <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+              <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="flex items-center gap-2 text-sm text-warm-muted mb-2">
                   <Building2 className="w-4 h-4" />
                   <span>{matchedClubs.length === 1 ? 'Club' : 'Clubs'}</span>
                 </div>
@@ -339,7 +340,7 @@ const CompleteProfile = () => {
                     <Badge
                       key={club}
                       variant="secondary"
-                      className={idx === 0 ? 'bg-emerald-100 text-emerald-700' : ''}
+                      className={idx === 0 ? 'bg-emerald-400/10 text-emerald-400' : ''}
                     >
                       {club}
                       {idx === 0 && matchedClubs.length > 1 && (
@@ -355,7 +356,8 @@ const CompleteProfile = () => {
           <div className="flex gap-3">
             <Button
               onClick={handleConfirmMatch}
-              className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+              className="flex-1 rounded-full text-night font-semibold"
+              style={{ background: 'linear-gradient(135deg, #34d399, #059669)' }}
               data-testid="confirm-pti-match-btn"
             >
               <Check className="w-4 h-4 mr-2" />
@@ -376,60 +378,62 @@ const CompleteProfile = () => {
 
     if (ptiLookupState === 'not_found') {
       return (
-        <div className="mt-4 p-6 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-200 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="mt-4 p-6 rounded-xl animate-in fade-in slide-in-from-top-4 duration-500" style={{ background: 'rgba(245,158,11,0.04)', border: '1px solid rgba(245,158,11,0.2)' }}>
           <div className="flex items-center gap-2 mb-4">
             <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center">
               <Search className="w-5 h-5 text-white" />
             </div>
-            <span className="text-amber-700 font-semibold">We couldn&apos;t automatically find your PTI</span>
+            <span className="text-amber-400 font-semibold">We couldn&apos;t automatically find your PTI</span>
           </div>
-          
-          <p className="text-gray-600 text-sm mb-4">
+
+          <p className="text-warm-muted text-sm mb-4">
             Select your name from the league roster, or enter your PTI manually.
           </p>
-          
+
           {/* Searchable Dropdown */}
           <div className="relative mb-4">
-            <div 
-              className="bg-white rounded-lg border border-amber-200 p-3 cursor-pointer flex items-center justify-between"
+            <div
+              className="rounded-lg p-3 cursor-pointer flex items-center justify-between"
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.06)' }}
               onClick={() => setShowDropdown(!showDropdown)}
               data-testid="pti-roster-dropdown"
             >
-              <span className="text-gray-600">Search league roster...</span>
-              <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+              <span className="text-warm-muted">Search league roster...</span>
+              <ChevronDown className={`w-5 h-5 text-warm-muted transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
             </div>
-            
+
             {showDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg border border-gray-200 shadow-lg z-50 max-h-64 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                <div className="p-2 border-b border-gray-100">
+              <div className="absolute top-full left-0 right-0 mt-1 rounded-lg shadow-lg z-50 max-h-64 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200" style={{ background: '#1b2838', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="p-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                   <Input
                     placeholder="Type to search..."
                     value={dropdownSearch}
                     onChange={(e) => setDropdownSearch(e.target.value)}
-                    className="text-sm"
+                    className="text-sm bg-white/5 border-white/6 text-warm"
                     autoFocus
                     data-testid="pti-roster-search"
                   />
                 </div>
                 <div className="max-h-48 overflow-y-auto">
                   {filteredRoster.length === 0 ? (
-                    <div className="p-4 text-center text-gray-500 text-sm">
+                    <div className="p-4 text-center text-warm-muted text-sm">
                       No players found
                     </div>
                   ) : (
                     filteredRoster.map((p, idx) => (
                       <div
                         key={idx}
-                        className="px-4 py-3 hover:bg-emerald-50 cursor-pointer border-b border-gray-50 last:border-0"
+                        className="px-4 py-3 hover:bg-white/5 cursor-pointer last:border-0"
+                        style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
                         onClick={() => handleSelectFromDropdown(p)}
                         data-testid={`pti-roster-item-${idx}`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-medium text-gray-900">{p.player_name}</span>
-                          <span className="text-emerald-600 font-semibold">{p.pti_value}</span>
+                          <span className="font-medium text-warm">{p.player_name}</span>
+                          <span className="text-emerald-400 font-semibold">{p.pti_value}</span>
                         </div>
                         {p.clubs && p.clubs.length > 0 && (
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="text-xs text-warm-muted mt-1">
                             {p.clubs.join(', ')}
                           </div>
                         )}
@@ -440,9 +444,9 @@ const CompleteProfile = () => {
               </div>
             )}
           </div>
-          
+
           <div className="flex gap-3">
-            <Button 
+            <Button
               onClick={handleManualEntry}
               variant="outline"
               className="flex-1"
@@ -450,10 +454,10 @@ const CompleteProfile = () => {
             >
               Enter PTI manually
             </Button>
-            <Button 
+            <Button
               onClick={handleNoPti}
               variant="ghost"
-              className="flex-1 text-gray-500"
+              className="flex-1 text-warm-muted"
               data-testid="no-pti-btn"
             >
               I don&apos;t have a PTI yet
@@ -467,25 +471,21 @@ const CompleteProfile = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-emerald-600 to-emerald-800 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg flex flex-col items-center">
-        <div
-          className="mb-6 select-none"
-          style={{
-            fontSize: '3.5rem',
-            fontWeight: 900,
-            letterSpacing: '-0.04em',
-            lineHeight: 1,
-            color: 'rgba(255,255,255,0.12)',
-            textShadow: '0 2px 4px rgba(0,0,0,0.15), 0 -1px 0 rgba(255,255,255,0.08)',
-          }}
-        >
-          Find4th
+    <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden" style={{ background: 'linear-gradient(170deg, #0a0f1a, #0d1b2a, #1b2838)' }}>
+      <WireMeshBg />
+      <GlowOrb className="w-96 h-96 -top-40 -right-40" color="#34d399" />
+      <GlowOrb className="w-64 h-64 bottom-20 -left-40" color="#f59e0b" />
+      <div className="w-full max-w-lg flex flex-col items-center relative z-10">
+        <div className="mb-8 flex items-center gap-2.5">
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #34d399, #059669)' }}>
+            <span className="text-white font-black text-lg">4</span>
+          </div>
+          <span className="text-2xl font-serif text-warm tracking-tight">Find4th</span>
         </div>
-      <Card className="w-full" data-testid="complete-profile-card">
+      <Card className="w-full rounded-2xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(20px)' }} data-testid="complete-profile-card">
         <CardHeader className="text-center pb-2">
-          <CardTitle className="text-2xl tracking-tight">Complete Your Profile</CardTitle>
-          <CardDescription className="text-sm">
+          <CardTitle className="text-2xl tracking-tight font-serif text-warm">Complete Your Profile</CardTitle>
+          <CardDescription className="text-sm text-warm-muted">
             Tell us about yourself so we can find the right matches for you
           </CardDescription>
         </CardHeader>
@@ -519,7 +519,7 @@ const CompleteProfile = () => {
                 disabled={ptiLookupState === 'searching'}
                 data-testid="name-input"
               />
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-warm-muted">
                 Enter your name exactly as it appears in league records for automatic PTI lookup
               </p>
             </div>
@@ -533,21 +533,21 @@ const CompleteProfile = () => {
                 <Label htmlFor="pti" className="flex items-center gap-2">
                   PTI Rating
                   {ptiVerified && (
-                    <Badge className="bg-emerald-100 text-emerald-700 text-xs">
+                    <Badge className="bg-emerald-400/10 text-emerald-400 text-xs">
                       <Shield className="w-3 h-3 mr-1" />
                       APTA Verified
                     </Badge>
                   )}
                 </Label>
                 {ptiVerified ? (
-                  <div className="flex items-center gap-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200">
-                    <div className="text-2xl font-bold text-emerald-600">{pti}</div>
-                    <div className="text-sm text-gray-600">APTA Official Rating</div>
+                  <div className="flex items-center gap-3 p-3 rounded-lg" style={{ background: 'rgba(52,211,153,0.06)', border: '1px solid rgba(52,211,153,0.2)' }}>
+                    <div className="text-2xl font-bold text-emerald-400">{pti}</div>
+                    <div className="text-sm text-warm-muted">APTA Official Rating</div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="ml-auto text-gray-500"
+                      className="ml-auto text-warm-muted"
                       onClick={() => {
                         setPtiVerified(false);
                         setPtiLookupState('idle');
@@ -568,7 +568,7 @@ const CompleteProfile = () => {
                       max="100"
                       data-testid="pti-input"
                     />
-                    <p className="text-xs text-gray-500 flex items-start gap-1">
+                    <p className="text-xs text-warm-muted flex items-start gap-1">
                       <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
                       Your Platform Tennis Index rating. Typical range is 20-80.
                     </p>
@@ -766,7 +766,7 @@ const CompleteProfile = () => {
                   data-testid="phone-input"
                 />
               </div>
-              <p className="text-xs text-gray-500 flex items-start gap-1">
+              <p className="text-xs text-warm-muted flex items-start gap-1">
                 <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
                 Add mobile number to enable instant SMS notifications for game &amp; player requests. Managed in profile settings.
               </p>
@@ -775,7 +775,8 @@ const CompleteProfile = () => {
           <CardFooter>
             <Button
               type="submit"
-              className="w-full bg-emerald-600 hover:bg-emerald-700"
+              className="w-full rounded-full text-night font-semibold hover:scale-105 transition-all"
+              style={{ background: 'linear-gradient(135deg, #34d399, #059669)' }}
               disabled={loading || ptiLookupState === 'searching'}
               data-testid="complete-profile-submit-btn"
             >

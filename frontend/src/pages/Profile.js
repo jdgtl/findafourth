@@ -311,7 +311,7 @@ const Profile = () => {
 
             {/* Info column */}
             <div className="flex-1 min-w-0 pt-1">
-              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white truncate">
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-warm font-serif truncate">
                 {player?.name || 'Unknown Player'}
               </h2>
               <div className="flex flex-wrap gap-1.5 mt-2">

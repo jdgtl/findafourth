@@ -6,13 +6,12 @@ test.describe('Authentication', () => {
   });
 
   test('landing page loads correctly', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: /findafourth/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible();
+    await expect(page.getByText('Find4th')).toBeVisible();
     await expect(page.getByRole('button', { name: /get started/i })).toBeVisible();
   });
 
   test('can navigate to login page', async ({ page }) => {
-    await page.getByRole('button', { name: /sign in/i }).click();
+    await page.goto('/login');
     await expect(page).toHaveURL('/login');
     await expect(page.getByTestId('login-card')).toBeVisible();
   });

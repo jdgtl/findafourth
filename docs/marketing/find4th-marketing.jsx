@@ -1,16 +1,26 @@
 import { useState, useEffect, useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
 import {
   Smartphone, Zap, ClipboardList, Calendar, MapPin, BarChart3,
   Bell, Users, Heart, User, Home, Target, Handshake, Building2, Timer,
   Lightbulb, Snowflake, ArrowRight, ChevronDown, Plus, Check, MoreHorizontal,
-  Clock, UserCheck, Menu, X, Phone, Mail, MessageCircle,
-  AlertTriangle
+  Clock, UserCheck, Menu, X, Quote, CircleOff, Phone, Mail, MessageCircle,
+  Star, AlertTriangle
 } from "lucide-react";
-import { colors } from "@/lib/theme";
-import { WireMeshBg, GlowOrb } from "@/components/MarketingEffects";
 
+const colors = {
+  night: "#0a0f1a", deepBlue: "#0d1b2a", slate: "#1b2838",
+  warm: "#f5e6c8", warmMuted: "#c4a97d", frost: "#d1e3f8",
+  emerald: "#34d399", emeraldDark: "#059669", amber: "#f59e0b", wire: "#4a5568",
+};
 const serif = "'DM Serif Display', Georgia, serif";
+const sans = "'DM Sans', sans-serif";
+
+function WireMeshBg() {
+  return (<svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ opacity: 0.04 }} xmlns="http://www.w3.org/2000/svg"><defs><pattern id="wire" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M0 12h24M12 0v24" stroke="#d1e3f8" strokeWidth="0.5" fill="none"/></pattern></defs><rect width="100%" height="100%" fill="url(#wire)"/></svg>);
+}
+function GlowOrb({ className = "", color = "#34d399" }) {
+  return (<div className={`absolute rounded-full pointer-events-none ${className}`} style={{ background: `radial-gradient(circle, ${color}30 0%, transparent 70%)`, filter: "blur(60px)" }} />);
+}
 
 // ─── NAV ─────────────────────────────────────────────
 function NavBar({ onGetStarted }) {
@@ -24,16 +34,15 @@ function NavBar({ onGetStarted }) {
       <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #34d399, #059669)" }}><span className="text-white font-black text-sm">4</span></div>
-          <span className="text-xl tracking-tight text-warm font-serif">Find4th</span>
+          <span className="text-xl tracking-tight" style={{ fontFamily: serif, color: colors.warm }}>Find4th</span>
         </div>
         <div className="hidden md:flex items-center gap-8">
-          {links.map(([label, id]) => (<button key={id} onClick={() => scrollTo(id)} className="text-sm tracking-wide transition-colors text-warm-muted hover:text-emerald-400">{label}</button>))}
-          <Link to="/login" className="text-sm tracking-wide transition-colors text-warm-muted hover:text-emerald-400">Sign In</Link>
+          {links.map(([label, id]) => (<button key={id} onClick={() => scrollTo(id)} className="text-sm tracking-wide transition-colors hover:text-emerald-400" style={{ color: colors.warmMuted, fontFamily: sans }}>{label}</button>))}
           <button onClick={onGetStarted} className="px-5 py-2.5 rounded-full text-sm font-semibold transition-all hover:scale-105" style={{ background: "linear-gradient(135deg, #34d399, #059669)", color: colors.night }}>Get Started</button>
         </div>
         <button className="md:hidden p-2" onClick={() => setMobileOpen(!mobileOpen)}>{mobileOpen ? <X size={24} className="text-emerald-400" /> : <Menu size={24} className="text-emerald-400" />}</button>
       </div>
-      {mobileOpen && (<div className="md:hidden px-6 pb-6 space-y-4" style={{ background: "rgba(10,15,26,0.98)" }}>{links.map(([label, id]) => (<button key={id} onClick={() => scrollTo(id)} className="block text-base w-full text-left py-2 text-warm">{label}</button>))}<Link to="/login" className="block text-base w-full text-left py-2 text-warm" onClick={() => setMobileOpen(false)}>Sign In</Link><button onClick={() => { onGetStarted(); setMobileOpen(false); }} className="w-full py-3 rounded-full text-sm font-semibold" style={{ background: "linear-gradient(135deg, #34d399, #059669)", color: colors.night }}>Get Started</button></div>)}
+      {mobileOpen && (<div className="md:hidden px-6 pb-6 space-y-4" style={{ background: "rgba(10,15,26,0.98)" }}>{links.map(([label, id]) => (<button key={id} onClick={() => scrollTo(id)} className="block text-base w-full text-left py-2" style={{ color: colors.warm }}>{label}</button>))}<button onClick={() => { onGetStarted(); setMobileOpen(false); }} className="w-full py-3 rounded-full text-sm font-semibold" style={{ background: "linear-gradient(135deg, #34d399, #059669)", color: colors.night }}>Get Started</button></div>)}
     </nav>
   );
 }
@@ -51,10 +60,10 @@ function Hero({ onGetStarted }) {
             Texts. Calls.<br />Emails. Crickets.
             <span className="block mt-2" style={{ background: "linear-gradient(135deg, #34d399, #6ee7b7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>There's a better way.</span>
           </h1>
-          <p className="text-lg leading-relaxed mb-10 max-w-lg text-warm-muted">One request. The right players notified. Spots filled and confirmed — before you've even laced up your shoes.</p>
+          <p className="text-lg leading-relaxed mb-10 max-w-lg" style={{ color: colors.warmMuted, fontFamily: sans }}>One request. The right players notified. Spots filled and confirmed — before you've even laced up your shoes.</p>
           <div className="flex flex-wrap gap-4">
             <button onClick={onGetStarted} className="group px-8 py-4 rounded-full text-lg font-semibold transition-all hover:scale-105 flex items-center gap-3" style={{ background: "linear-gradient(135deg, #34d399, #059669)", color: colors.night }}>Start Finding Players <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" /></button>
-            <button onClick={() => document.getElementById("how")?.scrollIntoView({ behavior: "smooth" })} className="px-8 py-4 rounded-full text-lg transition-all text-frost hover:bg-white/5" style={{ border: "1px solid rgba(209,227,248,0.2)" }}>See How It Works</button>
+            <button onClick={() => document.getElementById("how")?.scrollIntoView({ behavior: "smooth" })} className="px-8 py-4 rounded-full text-lg transition-all hover:bg-white/5" style={{ color: colors.frost, border: "1px solid rgba(209,227,248,0.2)" }}>See How It Works</button>
           </div>
         </div>
         {/* Phone mockup */}
@@ -97,7 +106,7 @@ function Hero({ onGetStarted }) {
         </div>
       </div>
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
-        <span className="text-xs tracking-widest uppercase text-warm-muted">Scroll</span>
+        <span className="text-xs tracking-widest uppercase" style={{ color: colors.warmMuted }}>Scroll</span>
         <div className="w-6 h-10 rounded-full border-2 flex items-start justify-center p-1.5" style={{ borderColor: "rgba(196,169,125,0.3)" }}><ChevronDown size={14} className="text-emerald-400 animate-bounce" /></div>
       </div>
     </section>
@@ -126,16 +135,17 @@ function ProblemSection() {
       <WireMeshBg />
       <div className="max-w-6xl mx-auto px-6">
         <div className="text-center mb-16">
-          <span className="inline-block text-xs tracking-widest uppercase mb-4 px-4 py-1.5 rounded-full" style={{ color: colors.amber, background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)" }}>The Problem</span>
-          <h2 className="text-3xl md:text-5xl mb-4 font-serif text-warm">Filling a game shouldn't<br /><span style={{ color: colors.amber }}>be a part-time job.</span></h2>
+          <span className="inline-block text-xs tracking-widest uppercase mb-4 px-4 py-1.5 rounded-full" style={{ color: colors.amber, background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)", fontFamily: sans }}>The Problem</span>
+          <h2 className="text-3xl md:text-5xl mb-4" style={{ fontFamily: serif, color: colors.warm }}>Filling a game shouldn't<br /><span style={{ color: colors.amber }}>be a part-time job.</span></h2>
         </div>
         <div className="grid md:grid-cols-2 gap-8">
+          {/* Without */}
           <div className="rounded-2xl p-8" style={{ background: "rgba(245,158,11,0.04)", border: "1px solid rgba(245,158,11,0.15)" }}>
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(245,158,11,0.15)" }}>
                 <Smartphone size={20} style={{ color: colors.amber }} />
               </div>
-              <h3 className="text-xl font-semibold font-serif" style={{ color: colors.amber }}>Without Find4th</h3>
+              <h3 className="text-xl font-semibold" style={{ fontFamily: serif, color: colors.amber }}>Without Find4th</h3>
             </div>
             <div className="space-y-4">
               {without.map((step, i) => {
@@ -143,30 +153,31 @@ function ProblemSection() {
                 return (
                   <div key={i} className="flex items-start gap-3" style={{ animation: `slideInLeft 0.5s ease ${i * 0.08}s both` }}>
                     <Icon size={18} className="flex-shrink-0 mt-0.5" style={{ color: colors.amber }} />
-                    <p className="text-sm leading-relaxed text-warm-muted">{step.text}</p>
+                    <p className="text-sm leading-relaxed" style={{ color: colors.warmMuted, fontFamily: sans }}>{step.text}</p>
                   </div>
                 );
               })}
             </div>
           </div>
+          {/* With */}
           <div className="rounded-2xl p-8" style={{ background: "rgba(52,211,153,0.04)", border: "1px solid rgba(52,211,153,0.15)" }}>
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(52,211,153,0.15)" }}>
-                <Zap size={20} className="text-emerald-400" />
+                <Zap size={20} style={{ color: colors.emerald }} />
               </div>
-              <h3 className="text-xl font-semibold font-serif text-emerald-400">With Find4th</h3>
+              <h3 className="text-xl font-semibold" style={{ fontFamily: serif, color: colors.emerald }}>With Find4th</h3>
             </div>
             <div className="space-y-4">
               {withApp.map((step, i) => (
                 <div key={i} className="flex items-center gap-3" style={{ animation: `slideUp 0.5s ease ${i * 0.08}s both` }}>
-                  <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold bg-emerald-400 text-night">{i + 1}</div>
-                  <span className="text-sm text-warm">{step}</span>
+                  <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold" style={{ background: colors.emerald, color: colors.night }}>{i + 1}</div>
+                  <span className="text-sm" style={{ color: colors.warm, fontFamily: sans }}>{step}</span>
                 </div>
               ))}
             </div>
             <div className="mt-6 pt-4 flex items-center gap-2" style={{ borderTop: "1px solid rgba(52,211,153,0.15)" }}>
-              <Timer size={16} className="text-emerald-400" />
-              <span className="text-sm font-medium text-emerald-400">One place. One tap. Done.</span>
+              <Timer size={16} style={{ color: colors.emerald }} />
+              <span className="text-sm font-medium" style={{ color: colors.emerald, fontFamily: sans }}>One place. One tap. Done.</span>
             </div>
           </div>
         </div>
@@ -247,12 +258,12 @@ function HowItWorks() {
   ];
 
   return (
-    <section id="how" className="relative py-24 bg-night">
+    <section id="how" className="relative py-24" style={{ background: colors.night }}>
       <WireMeshBg /><GlowOrb className="w-80 h-80 top-0 right-0" color="#34d399" />
       <div className="max-w-6xl mx-auto px-6 relative z-10">
         <div className="text-center mb-16">
-          <span className="inline-block text-xs tracking-widest uppercase mb-4 px-4 py-1.5 rounded-full text-emerald-400" style={{ background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)" }}>How It Works</span>
-          <h2 className="text-3xl md:text-5xl font-serif text-warm">Fill your game<br /><span className="text-emerald-400">without the runaround.</span></h2>
+          <span className="inline-block text-xs tracking-widest uppercase mb-4 px-4 py-1.5 rounded-full" style={{ color: colors.emerald, background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)", fontFamily: sans }}>How It Works</span>
+          <h2 className="text-3xl md:text-5xl" style={{ fontFamily: serif, color: colors.warm }}>Fill your game<br /><span style={{ color: colors.emerald }}>without the runaround.</span></h2>
         </div>
         <div className="flex justify-center gap-4 mb-12">
           {tabs.map((tab, i) => {
@@ -261,7 +272,7 @@ function HowItWorks() {
               <button key={i} onClick={() => setActiveStep(i)} className="flex items-center gap-2 px-5 py-3 rounded-full text-sm font-medium transition-all" style={{
                 background: activeStep===i?"rgba(52,211,153,0.15)":"rgba(255,255,255,0.03)",
                 border: activeStep===i?"1px solid rgba(52,211,153,0.4)":"1px solid rgba(255,255,255,0.08)",
-                color: activeStep===i?colors.emerald:colors.warmMuted,
+                color: activeStep===i?colors.emerald:colors.warmMuted, fontFamily: sans,
               }}>
                 <Icon size={20} /><span className="hidden sm:inline">{tab.label}</span>
               </button>
@@ -272,10 +283,10 @@ function HowItWorks() {
           <div>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold" style={{ background: "rgba(52,211,153,0.15)", color: colors.emerald }}>{activeStep+1}</div>
-              <h3 className="text-2xl font-serif text-warm">{steps[activeStep].title}</h3>
+              <h3 className="text-2xl" style={{ fontFamily: serif, color: colors.warm }}>{steps[activeStep].title}</h3>
             </div>
-            <p className="text-lg leading-relaxed mb-4 text-warm-muted">{steps[activeStep].desc}</p>
-            <p className="text-sm p-4 rounded-xl flex items-start gap-2 text-frost" style={{ background: "rgba(209,227,248,0.05)", border: "1px solid rgba(209,227,248,0.1)" }}>
+            <p className="text-lg leading-relaxed mb-4" style={{ color: colors.warmMuted, fontFamily: sans }}>{steps[activeStep].desc}</p>
+            <p className="text-sm p-4 rounded-xl flex items-start gap-2" style={{ color: colors.frost, background: "rgba(209,227,248,0.05)", border: "1px solid rgba(209,227,248,0.1)", fontFamily: sans }}>
               <Lightbulb size={16} className="flex-shrink-0 mt-0.5" style={{ color: colors.amber }} />{steps[activeStep].detail}
             </p>
           </div>
@@ -303,11 +314,11 @@ function Features() {
       <WireMeshBg />
       <div className="max-w-6xl mx-auto px-6 relative z-10">
         <div className="text-center mb-16">
-          <span className="inline-block text-xs tracking-widest uppercase mb-4 px-4 py-1.5 rounded-full text-frost" style={{ background: "rgba(209,227,248,0.05)", border: "1px solid rgba(209,227,248,0.1)" }}>Features</span>
-          <h2 className="text-3xl md:text-5xl mb-4 font-serif text-warm">
-            Built by paddle players,<br /><span className="text-emerald-400">for paddle players.</span>
+          <span className="inline-block text-xs tracking-widest uppercase mb-4 px-4 py-1.5 rounded-full" style={{ color: colors.frost, background: "rgba(209,227,248,0.05)", border: "1px solid rgba(209,227,248,0.1)", fontFamily: sans }}>Features</span>
+          <h2 className="text-3xl md:text-5xl mb-4" style={{ fontFamily: serif, color: colors.warm }}>
+            Built by paddle players,<br /><span style={{ color: colors.emerald }}>for paddle players.</span>
           </h2>
-          <p className="text-lg max-w-2xl mx-auto text-warm-muted">Every feature exists because we needed it ourselves.</p>
+          <p className="text-lg max-w-2xl mx-auto" style={{ color: colors.warmMuted, fontFamily: sans }}>Every feature exists because we needed it ourselves.</p>
         </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
           {features.map((f, i) => { const Icon = f.icon; return (
@@ -316,11 +327,11 @@ function Features() {
               border: f.highlight ? "1px solid rgba(52,211,153,0.2)" : "1px solid rgba(255,255,255,0.06)",
             }}>
               <div className="flex items-center justify-between mb-4">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(52,211,153,0.1)" }}><Icon size={20} className="text-emerald-400" /></div>
-                <span className="font-semibold tracking-wider uppercase px-2.5 py-1 rounded-full text-emerald-400" style={{ background: "rgba(52,211,153,0.1)", fontSize: 10 }}>{f.tag}</span>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(52,211,153,0.1)" }}><Icon size={20} style={{ color: colors.emerald }} /></div>
+                <span className="font-semibold tracking-wider uppercase px-2.5 py-1 rounded-full" style={{ color: colors.emerald, background: "rgba(52,211,153,0.1)", fontFamily: sans, fontSize: 10 }}>{f.tag}</span>
               </div>
-              <h3 className="text-lg font-semibold mb-2 font-serif text-warm">{f.title}</h3>
-              <p className="text-sm leading-relaxed text-warm-muted">{f.desc}</p>
+              <h3 className="text-lg font-semibold mb-2" style={{ fontFamily: serif, color: colors.warm }}>{f.title}</h3>
+              <p className="text-sm leading-relaxed" style={{ color: colors.warmMuted, fontFamily: sans }}>{f.desc}</p>
             </div>
           ); })}
         </div>
@@ -348,18 +359,18 @@ function FAQ() {
       <WireMeshBg />
       <div className="max-w-3xl mx-auto px-6 relative z-10">
         <div className="text-center mb-16">
-          <span className="inline-block text-xs tracking-widest uppercase mb-4 px-4 py-1.5 rounded-full text-frost" style={{ background: "rgba(209,227,248,0.05)", border: "1px solid rgba(209,227,248,0.1)" }}>FAQ</span>
-          <h2 className="text-3xl md:text-5xl mb-4 font-serif text-warm">Got questions?</h2>
-          <p className="text-lg text-warm-muted">Everything you need to know before you start finding players.</p>
+          <span className="inline-block text-xs tracking-widest uppercase mb-4 px-4 py-1.5 rounded-full" style={{ color: colors.frost, background: "rgba(209,227,248,0.05)", border: "1px solid rgba(209,227,248,0.1)", fontFamily: sans }}>FAQ</span>
+          <h2 className="text-3xl md:text-5xl mb-4" style={{ fontFamily: serif, color: colors.warm }}>Got questions?</h2>
+          <p className="text-lg" style={{ color: colors.warmMuted, fontFamily: sans }}>Everything you need to know before you start finding players.</p>
         </div>
         <div className="space-y-3">
           {faqs.map((faq, i) => (
             <div key={i} className="rounded-xl overflow-hidden transition-all" style={{ background: open===i?"rgba(52,211,153,0.05)":"rgba(255,255,255,0.02)", border: open===i?"1px solid rgba(52,211,153,0.15)":"1px solid rgba(255,255,255,0.06)" }}>
               <button onClick={() => setOpen(open===i?null:i)} className="w-full text-left px-6 py-5 flex items-center justify-between gap-4">
-                <span className="text-base font-medium text-warm">{faq.q}</span>
+                <span className="text-base font-medium" style={{ color: colors.warm, fontFamily: sans }}>{faq.q}</span>
                 <span className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-transform" style={{ background: "rgba(52,211,153,0.1)", color: colors.emerald, transform: open===i?"rotate(45deg)":"none" }}><Plus size={16} /></span>
               </button>
-              {open===i && (<div className="px-6 pb-5"><p className="text-sm leading-relaxed text-warm-muted">{faq.a}</p></div>)}
+              {open===i && (<div className="px-6 pb-5"><p className="text-sm leading-relaxed" style={{ color: colors.warmMuted, fontFamily: sans }}>{faq.a}</p></div>)}
             </div>
           ))}
         </div>
@@ -374,14 +385,14 @@ function FinalCTA({ onGetStarted }) {
     <section className="relative py-24 overflow-hidden" style={{ background: `linear-gradient(135deg, ${colors.deepBlue}, #0a2e1f)` }}>
       <GlowOrb className="w-96 h-96 top-0 left-1/2 -translate-x-1/2 -translate-y-1/3" color="#34d399" /><WireMeshBg />
       <div className="max-w-3xl mx-auto px-6 text-center relative z-10">
-        <Target size={56} className="mx-auto mb-6 text-emerald-400" />
-        <h2 className="text-3xl md:text-5xl mb-6 font-serif text-warm">Your next game is<span className="block text-emerald-400">one tap away.</span></h2>
-        <p className="text-lg mb-10 max-w-xl mx-auto text-warm-muted">No download required. Sign up, set your club, and start finding players.</p>
+        <Target size={56} className="mx-auto mb-6" style={{ color: colors.emerald }} />
+        <h2 className="text-3xl md:text-5xl mb-6" style={{ fontFamily: serif, color: colors.warm }}>Your next game is<span className="block" style={{ color: colors.emerald }}>one tap away.</span></h2>
+        <p className="text-lg mb-10 max-w-xl mx-auto" style={{ color: colors.warmMuted, fontFamily: sans }}>No download required. Sign up, set your club, and start finding players.</p>
         <button onClick={onGetStarted} className="group px-10 py-5 rounded-full text-xl font-semibold transition-all hover:scale-105 inline-flex items-center gap-3" style={{ background: "linear-gradient(135deg, #34d399, #059669)", color: colors.night, boxShadow: "0 0 40px rgba(52,211,153,0.3)" }}>
           Get Started
           <ArrowRight className="w-6 h-6 transition-transform group-hover:translate-x-1" />
         </button>
-        <p className="text-sm mt-6 text-warm-muted">Takes 30 seconds. No app download needed.</p>
+        <p className="text-sm mt-6" style={{ color: colors.warmMuted, fontFamily: sans }}>Takes 30 seconds. No app download needed.</p>
       </div>
     </section>
   );
@@ -390,53 +401,59 @@ function FinalCTA({ onGetStarted }) {
 // ─── FOOTER ─────────────────────────────────────────
 function Footer() {
   const cols = [
-    { title: "Product", links: [["How It Works", "how"], ["Features", "features"], ["FAQ", "faq"]] },
-    { title: "Community", links: [["Clubs", "/clubs"], ["Partner Chemistry", null], ["PTI Ratings", null]] },
-    { title: "Support", links: [["Contact Us", null], ["Privacy Policy", null], ["Terms of Service", null]] },
+    { title: "Product", links: ["How It Works","Features","FAQ"] },
+    { title: "Community", links: ["Clubs","Partner Chemistry","PTI Ratings"] },
+    { title: "Support", links: ["Contact Us","Privacy Policy","Terms of Service"] },
   ];
   return (
-    <footer className="py-12 bg-night" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+    <footer className="py-12" style={{ background: colors.night, borderTop: "1px solid rgba(255,255,255,0.05)" }}>
       <div className="max-w-6xl mx-auto px-6">
         <div className="flex flex-col items-center text-center mb-10">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #34d399, #059669)" }}><span className="text-white font-black text-xs">4</span></div>
-            <span className="text-lg font-serif text-warm">Find4th</span>
+            <span className="text-lg" style={{ fontFamily: serif, color: colors.warm }}>Find4th</span>
           </div>
-          <p className="text-sm leading-relaxed max-w-sm text-warm-muted">Taking the hassle out of finding paddle players.</p>
+          <p className="text-sm leading-relaxed max-w-sm" style={{ color: colors.warmMuted, fontFamily: sans }}>Taking the hassle out of finding paddle players.</p>
         </div>
         <div className="flex justify-between mb-10">
           {cols.map((col) => (
             <div key={col.title}>
-              <h4 className="text-sm font-semibold mb-4 tracking-wide uppercase text-warm">{col.title}</h4>
+              <h4 className="text-sm font-semibold mb-4 tracking-wide uppercase" style={{ color: colors.warm, fontFamily: sans }}>{col.title}</h4>
               <div className="space-y-2">
-                {col.links.map(([label, target]) => {
-                  if (target && target.startsWith('/')) {
-                    return <Link key={label} to={target} className="block text-sm transition-colors text-warm-muted hover:text-emerald-400">{label}</Link>;
-                  }
-                  if (target) {
-                    return <button key={label} onClick={() => document.getElementById(target)?.scrollIntoView({ behavior: "smooth" })} className="block text-sm transition-colors text-warm-muted hover:text-emerald-400">{label}</button>;
-                  }
-                  return <span key={label} className="block text-sm text-warm-muted">{label}</span>;
-                })}
+                {col.links.map(link => (<button key={link} className="block text-sm transition-colors hover:text-emerald-400" style={{ color: colors.warmMuted, fontFamily: sans }}>{link}</button>))}
               </div>
             </div>
           ))}
         </div>
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-          <p className="text-xs text-warm-muted">© 2026 Find4th. All rights reserved.</p>
-          <p className="text-xs flex items-center gap-1.5" style={{ color: "rgba(196,169,125,0.5)" }}>Made with <Snowflake size={12} /> for the paddle community</p>
+          <p className="text-xs" style={{ color: colors.warmMuted, fontFamily: sans }}>© 2026 Find4th. All rights reserved.</p>
+          <p className="text-xs flex items-center gap-1.5" style={{ color: "rgba(196,169,125,0.5)", fontFamily: sans }}>Made with <Snowflake size={12} /> for the paddle community</p>
         </div>
       </div>
     </footer>
   );
 }
 
+// ─── GLOBAL STYLES ──────────────────────────────────
+function GlobalStyles() {
+  return (<style>{`
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Serif+Display&display=swap');
+    @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes floatIn { from { opacity: 0; transform: translateY(20px) scale(0.9); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideInLeft { from { opacity: 0; transform: translateX(-30px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes scaleIn { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+    html { scroll-behavior: smooth; } body { margin: 0; padding: 0; background: #0a0f1a; } *, *::before, *::after { box-sizing: border-box; }
+  `}</style>);
+}
+
 // ─── MAIN ───────────────────────────────────────────
-export default function Landing() {
-  const navigate = useNavigate();
-  const handleGetStarted = () => navigate("/signup");
+export default function Find4thMarketing() {
+  const handleGetStarted = () => window.open("https://find4th.com/signup", "_blank");
   return (
-    <div>
+    <div style={{ fontFamily: sans }}>
+      <GlobalStyles />
       <NavBar onGetStarted={handleGetStarted} />
       <Hero onGetStarted={handleGetStarted} />
       <ProblemSection />

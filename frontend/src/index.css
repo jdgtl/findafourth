@@ -5,7 +5,7 @@
 body {
     margin: 0;
     font-family:
-        -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+        'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
         "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
         sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -44,32 +44,46 @@ code {
         --chart-4: 43 74% 66%;
         --chart-5: 27 87% 67%;
         --radius: 0.5rem;
+
+        --color-night: #0a0f1a;
+        --color-deep-blue: #0d1b2a;
+        --color-slate: #1b2838;
+        --color-warm: #f5e6c8;
+        --color-warm-muted: #c4a97d;
+        --color-frost: #d1e3f8;
+        --color-emerald: #34d399;
+        --color-emerald-dark: #059669;
+        --color-amber: #f59e0b;
+        --font-serif: 'DM Serif Display', Georgia, serif;
+        --font-sans: 'DM Sans', sans-serif;
+        --radius-card: 1rem;
+        --radius-button: 9999px;
     }
     .dark {
-        --background: 160 10% 5%;
-        --foreground: 0 0% 98%;
-        --card: 160 10% 7%;
-        --card-foreground: 0 0% 98%;
-        --popover: 160 10% 7%;
-        --popover-foreground: 0 0% 98%;
-        --primary: 160 72% 45%;
-        --primary-foreground: 0 0% 100%;
-        --secondary: 160 10% 15%;
-        --secondary-foreground: 0 0% 98%;
-        --muted: 160 10% 15%;
-        --muted-foreground: 160 6% 60%;
-        --accent: 160 10% 15%;
-        --accent-foreground: 0 0% 98%;
-        --destructive: 0 62% 30%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 160 10% 15%;
-        --input: 160 10% 15%;
-        --ring: 160 72% 45%;
-        --chart-1: 220 70% 50%;
-        --chart-2: 160 60% 45%;
-        --chart-3: 30 80% 55%;
-        --chart-4: 280 65% 60%;
-        --chart-5: 340 75% 55%;
+        --background: 222 43% 5%;
+        --foreground: 36 77% 88%;
+        --card: 213 51% 11%;
+        --card-foreground: 36 77% 88%;
+        --popover: 210 33% 16%;
+        --popover-foreground: 36 77% 88%;
+        --primary: 160 64% 51%;
+        --primary-foreground: 222 43% 5%;
+        --secondary: 210 33% 16%;
+        --secondary-foreground: 36 77% 88%;
+        --muted: 210 33% 16%;
+        --muted-foreground: 36 34% 63%;
+        --accent: 210 33% 16%;
+        --accent-foreground: 36 77% 88%;
+        --destructive: 0 62% 50%;
+        --destructive-foreground: 36 77% 88%;
+        --border: 210 33% 20%;
+        --input: 210 33% 20%;
+        --ring: 160 64% 51%;
+        --chart-1: 160 64% 51%;
+        --chart-2: 36 77% 88%;
+        --chart-3: 213 51% 50%;
+        --chart-4: 43 96% 56%;
+        --chart-5: 0 62% 50%;
     }
 }
 
@@ -139,12 +153,9 @@ code {
     [data-testid="player-card"] {
         border-radius: 0 !important;
         border: none !important;
-        border-bottom: 1px solid rgb(229, 231, 235) !important;
+        border-bottom: 1px solid rgba(255,255,255,0.06) !important;
         transition: none !important;
         padding: 0.875rem 0.75rem !important;
-    }
-    .dark [data-testid="player-card"] {
-        border-bottom-color: rgb(55, 65, 81) !important;
     }
     /* Avatar: full opacity */
     [data-testid="player-card"] [data-slot="avatar"] {
@@ -152,38 +163,32 @@ code {
     }
     /* Name: active color */
     [data-testid="player-card"] h3 {
-        color: rgb(17, 24, 39) !important;
+        color: #f5e6c8 !important;
         text-shadow: none !important;
         transition: none !important;
-    }
-    .dark [data-testid="player-card"] h3 {
-        color: rgb(255, 255, 255) !important;
     }
     /* Avatar fallback: full bg */
     [data-testid="player-card"] [data-slot="avatar-fallback"] {
         transition: none !important;
     }
-/* Action/invite icons container: full opacity */
+    /* Action/invite icons container: full opacity */
     [data-testid="player-card"] .opacity-50,
     [data-testid="player-card"] .action-icons {
         opacity: 1 !important;
     }
     /* Pipe separator: visible */
     [data-testid="player-card"] .h-8.w-px {
-        background-color: rgb(229, 231, 235) !important;
+        background-color: rgba(255,255,255,0.06) !important;
         transition: none !important;
     }
     /* PTI value: active color */
     [data-testid="player-card"] .min-w-\[36px\] .font-semibold {
-        color: rgb(17, 24, 39) !important;
+        color: #f5e6c8 !important;
         transition: none !important;
-    }
-    .dark [data-testid="player-card"] .min-w-\[36px\] .font-semibold {
-        color: rgb(255, 255, 255) !important;
     }
     /* PTI label: active color */
     [data-testid="player-card"] .min-w-\[36px\] .text-\[10px\] {
-        color: rgb(107, 114, 128) !important;
+        color: #c4a97d !important;
         transition: none !important;
     }
 }
@@ -197,4 +202,34 @@ code {
     textarea {
         min-height: 44px;
     }
+}
+
+/* Marketing animations */
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-12px); }
+}
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes floatIn {
+    from { opacity: 0; transform: translateY(20px) scale(0.9); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+@keyframes slideInLeft {
+    from { opacity: 0; transform: translateX(-30px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+@keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+html {
+    scroll-behavior: smooth;
 }

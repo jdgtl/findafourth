@@ -80,7 +80,7 @@ const Home = () => {
       <div className="max-w-2xl mx-auto space-y-6 pb-24" data-testid="home-page">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-warm font-serif">
             Find a Game
           </h1>
           <Button
@@ -221,7 +221,8 @@ const Home = () => {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
-                className="w-16 h-16 rounded-full bg-emerald-600 hover:bg-emerald-700 shadow-lg p-0 flex items-center justify-center"
+                className="w-16 h-16 rounded-full shadow-lg p-0 flex items-center justify-center text-night hover:scale-105 transition-all"
+                style={{ background: 'linear-gradient(135deg, #34d399, #059669)', boxShadow: '0 0 30px rgba(52,211,153,0.3)' }}
                 data-testid="fab-btn"
               >
                 <Plus className="w-7 h-7" />

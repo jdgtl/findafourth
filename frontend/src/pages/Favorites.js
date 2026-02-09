@@ -108,7 +108,7 @@ const Favorites = () => {
     <AppLayout>
       <div className="max-w-2xl mx-auto space-y-6" data-testid="favorites-page">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Favorites</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-warm font-serif">Favorites</h1>
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
               <Button
@@ -143,7 +143,7 @@ const Favorites = () => {
                     {searchResults.map((p) => (
                       <div
                         key={p.id}
-                        className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+                        className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5"
                       >
                         <div className="flex items-center gap-3">
                           <Avatar className="w-8 h-8">

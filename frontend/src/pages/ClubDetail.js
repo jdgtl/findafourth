@@ -406,7 +406,7 @@ const InviteModal = ({ isOpen, onClose, playerName, clubName, inviteType }) => {
             Invite {playerName}
           </DialogTitle>
           <DialogDescription>
-            Send an invite to join FindaFourth. They'll receive a link to sign up.
+            Send an invite to join Find4th. They'll receive a link to sign up.
           </DialogDescription>
         </DialogHeader>
 

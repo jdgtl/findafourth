@@ -4,9 +4,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
+import { WireMeshBg, GlowOrb } from '@/components/MarketingEffects';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -37,36 +37,42 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-emerald-600 to-emerald-800 flex items-center justify-center p-4">
-      <div className="w-full max-w-md flex flex-col items-center">
-        <Link
-          to="/"
-          className="mb-6 select-none no-underline"
-          style={{
-            fontSize: '3.5rem',
-            fontWeight: 900,
-            letterSpacing: '-0.04em',
-            lineHeight: 1,
-            color: 'rgba(255,255,255,0.12)',
-            textShadow: '0 2px 4px rgba(0,0,0,0.15), 0 -1px 0 rgba(255,255,255,0.08)',
-          }}
-        >
-          Find4th
+    <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden" style={{ background: 'linear-gradient(170deg, #0a0f1a, #0d1b2a, #1b2838)' }}>
+      <WireMeshBg />
+      <GlowOrb className="w-96 h-96 -top-40 -right-40" color="#34d399" />
+      <GlowOrb className="w-64 h-64 bottom-20 -left-40" color="#f59e0b" />
+
+      <div className="w-full max-w-md flex flex-col items-center relative z-10">
+        <Link to="/" className="mb-8 flex items-center gap-2.5 no-underline">
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #34d399, #059669)' }}>
+            <span className="text-white font-black text-lg">4</span>
+          </div>
+          <span className="text-2xl font-serif text-warm tracking-tight">Find4th</span>
         </Link>
-      <Card className="w-full" data-testid="login-card">
-        <CardHeader className="text-center pb-2">
-          <CardTitle className="text-2xl tracking-tight">Welcome Back</CardTitle>
-          <CardDescription className="text-sm">Sign in to find your next match</CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
+
+        <div
+          className="w-full rounded-2xl p-8"
+          style={{
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px solid rgba(255,255,255,0.06)',
+            backdropFilter: 'blur(20px)',
+          }}
+          data-testid="login-card"
+        >
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-serif text-warm tracking-tight">Welcome Back</h1>
+            <p className="text-sm text-warm-muted mt-1">Sign in to find your next match</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
+
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-frost text-sm">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -75,10 +81,12 @@ const Login = () => {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 data-testid="email-input"
+                className="bg-white/5 border-white/6 text-warm placeholder:text-warm-muted/50 focus:border-emerald-400/40 focus:ring-emerald-400/20"
               />
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-frost text-sm">Password</Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -87,13 +95,13 @@ const Login = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="pr-10"
+                  className="pr-10 bg-white/5 border-white/6 text-warm placeholder:text-warm-muted/50 focus:border-emerald-400/40 focus:ring-emerald-400/20"
                   data-testid="password-input"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-warm-muted hover:text-warm"
                   data-testid="toggle-password-visibility"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
@@ -101,11 +109,11 @@ const Login = () => {
                 </button>
               </div>
             </div>
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-4">
+
             <Button
               type="submit"
-              className="w-full bg-emerald-600 hover:bg-emerald-700"
+              className="w-full rounded-full text-night font-semibold hover:scale-105 transition-all"
+              style={{ background: 'linear-gradient(135deg, #34d399, #059669)' }}
               disabled={loading}
               data-testid="login-submit-btn"
             >
@@ -118,15 +126,15 @@ const Login = () => {
                 'Sign In'
               )}
             </Button>
-            <p className="text-sm text-gray-600">
+
+            <p className="text-sm text-warm-muted text-center">
               Don't have an account?{' '}
-              <Link to="/signup" className="text-emerald-600 hover:underline">
+              <Link to="/signup" className="text-emerald-400 hover:underline">
                 Sign up
               </Link>
             </p>
-          </CardFooter>
-        </form>
-      </Card>
+          </form>
+        </div>
       </div>
     </div>
   );

@@ -150,9 +150,9 @@ const PTIHistoryChart = ({ playerName, currentPti }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-white p-2 border border-gray-200 rounded-lg shadow-lg">
-          <p className="text-sm text-gray-600">{data.fullDate}</p>
-          <p className="text-lg font-bold text-emerald-600">PTI: {data.pti}</p>
+        <div className="bg-white dark:bg-f4-slate p-2 border border-gray-200 dark:border-white/10 rounded-lg shadow-lg">
+          <p className="text-sm text-gray-600 dark:text-warm-muted">{data.fullDate}</p>
+          <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">PTI: {data.pti}</p>
         </div>
       );
     }
@@ -172,10 +172,10 @@ const PTIHistoryChart = ({ playerName, currentPti }) => {
               variant="secondary"
               className={
                 trend.direction === 'improving'
-                  ? 'bg-emerald-100 text-emerald-700'
+                  ? 'bg-emerald-100 dark:bg-emerald-400/10 text-emerald-700 dark:text-emerald-400'
                   : trend.direction === 'declining'
-                  ? 'bg-red-100 text-red-700'
-                  : 'bg-gray-100 text-gray-700'
+                  ? 'bg-red-100 dark:bg-red-400/10 text-red-700 dark:text-red-400'
+                  : 'bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-warm-muted'
               }
             >
               {trend.direction === 'improving' ? (

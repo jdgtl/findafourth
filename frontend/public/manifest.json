@@ -1,11 +1,11 @@
 {
-  "name": "FindaFourth",
-  "short_name": "Finda4th",
+  "name": "Find4th",
+  "short_name": "Find4th",
   "description": "Find your fourth player for platform tennis in seconds",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#10b981",
+  "background_color": "#0a0f1a",
+  "theme_color": "#0a0f1a",
   "orientation": "portrait-primary",
   "icons": [
     {

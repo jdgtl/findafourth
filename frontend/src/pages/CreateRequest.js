@@ -471,7 +471,7 @@ const CreateRequest = () => {
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
                       audience === 'crews' 
                         ? 'border-emerald-500 bg-emerald-500' 
-                        : 'border-gray-300'
+                        : 'border-gray-300 dark:border-gray-600'
                     }`}>
                       {audience === 'crews' && (
                         <div className="w-2 h-2 rounded-full bg-white" />
@@ -536,7 +536,7 @@ const CreateRequest = () => {
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
                       audience === 'club'
                         ? 'border-emerald-500 bg-emerald-500'
-                        : 'border-gray-300'
+                        : 'border-gray-300 dark:border-gray-600'
                     }`}>
                       {audience === 'club' && (
                         <div className="w-2 h-2 rounded-full bg-white" />
@@ -589,7 +589,7 @@ const CreateRequest = () => {
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
                       audience === 'regional' 
                         ? 'border-emerald-500 bg-emerald-500' 
-                        : 'border-gray-300'
+                        : 'border-gray-300 dark:border-gray-600'
                     }`}>
                       {audience === 'regional' && (
                         <div className="w-2 h-2 rounded-full bg-white" />
@@ -617,7 +617,7 @@ const CreateRequest = () => {
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
                       mode === 'quick_fill' 
                         ? 'border-emerald-500 bg-emerald-500' 
-                        : 'border-gray-300'
+                        : 'border-gray-300 dark:border-gray-600'
                     }`}>
                       {mode === 'quick_fill' && (
                         <div className="w-2 h-2 rounded-full bg-white" />
@@ -643,7 +643,7 @@ const CreateRequest = () => {
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
                       mode === 'organizer_picks' 
                         ? 'border-emerald-500 bg-emerald-500' 
-                        : 'border-gray-300'
+                        : 'border-gray-300 dark:border-gray-600'
                     }`}>
                       {mode === 'organizer_picks' && (
                         <div className="w-2 h-2 rounded-full bg-white" />
