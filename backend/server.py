@@ -893,6 +893,9 @@ async def complete_profile(profile: PlayerProfile, current_player: dict = Depend
         "profile_complete": True,
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
+    # Auto-enable SMS notifications when phone number is provided
+    if profile.phone and profile.phone.strip():
+        update_data["notify_sms"] = True
     
     await db.players.update_one(
         {"id": current_player['id']},

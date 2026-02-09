@@ -38,13 +38,25 @@ const Login = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-emerald-600 to-emerald-800 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md" data-testid="login-card">
-        <CardHeader className="text-center">
-          <Link to="/" className="text-2xl font-bold text-emerald-600 mb-2">
-            FindaFourth
-          </Link>
-          <CardTitle>Welcome Back</CardTitle>
-          <CardDescription>Sign in to find your next match</CardDescription>
+      <div className="w-full max-w-md flex flex-col items-center">
+        <Link
+          to="/"
+          className="mb-6 select-none no-underline"
+          style={{
+            fontSize: '3.5rem',
+            fontWeight: 900,
+            letterSpacing: '-0.04em',
+            lineHeight: 1,
+            color: 'rgba(255,255,255,0.12)',
+            textShadow: '0 2px 4px rgba(0,0,0,0.15), 0 -1px 0 rgba(255,255,255,0.08)',
+          }}
+        >
+          Find4th
+        </Link>
+      <Card className="w-full" data-testid="login-card">
+        <CardHeader className="text-center pb-2">
+          <CardTitle className="text-2xl tracking-tight">Welcome Back</CardTitle>
+          <CardDescription className="text-sm">Sign in to find your next match</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
@@ -115,6 +127,7 @@ const Login = () => {
           </CardFooter>
         </form>
       </Card>
+      </div>
     </div>
   );
 };

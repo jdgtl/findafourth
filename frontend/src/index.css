@@ -134,6 +134,60 @@ code {
     background: hsl(var(--muted-foreground) / 0.5);
 }
 
+/* Mobile: Player cards — active state by default, list-style dividers, no hover */
+@media (max-width: 767px) {
+    [data-testid="player-card"] {
+        border-radius: 0 !important;
+        border: none !important;
+        border-bottom: 1px solid rgb(229, 231, 235) !important;
+        transition: none !important;
+        padding: 0.875rem 0.75rem !important;
+    }
+    .dark [data-testid="player-card"] {
+        border-bottom-color: rgb(55, 65, 81) !important;
+    }
+    /* Avatar: full opacity */
+    [data-testid="player-card"] [data-slot="avatar"] {
+        opacity: 1 !important;
+    }
+    /* Name: active color */
+    [data-testid="player-card"] h3 {
+        color: rgb(17, 24, 39) !important;
+        text-shadow: none !important;
+        transition: none !important;
+    }
+    .dark [data-testid="player-card"] h3 {
+        color: rgb(255, 255, 255) !important;
+    }
+    /* Avatar fallback: full bg */
+    [data-testid="player-card"] [data-slot="avatar-fallback"] {
+        transition: none !important;
+    }
+/* Action/invite icons container: full opacity */
+    [data-testid="player-card"] .opacity-50,
+    [data-testid="player-card"] .action-icons {
+        opacity: 1 !important;
+    }
+    /* Pipe separator: visible */
+    [data-testid="player-card"] .h-8.w-px {
+        background-color: rgb(229, 231, 235) !important;
+        transition: none !important;
+    }
+    /* PTI value: active color */
+    [data-testid="player-card"] .min-w-\[36px\] .font-semibold {
+        color: rgb(17, 24, 39) !important;
+        transition: none !important;
+    }
+    .dark [data-testid="player-card"] .min-w-\[36px\] .font-semibold {
+        color: rgb(255, 255, 255) !important;
+    }
+    /* PTI label: active color */
+    [data-testid="player-card"] .min-w-\[36px\] .text-\[10px\] {
+        color: rgb(107, 114, 128) !important;
+        transition: none !important;
+    }
+}
+
 /* Mobile touch targets - only for primary interactive elements */
 @media (max-width: 768px) {
     button:not([role="checkbox"]):not([role="switch"]):not([data-radix-collection-item]),

@@ -24,6 +24,30 @@ import {
 import { Loader2, X, Info, Check, Search, ChevronDown, Shield, Building2, ChevronsUpDown, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+// US Flag icon — monochrome, matches muted input text
+const USFlag = ({ className }) => (
+  <svg viewBox="0 0 24 16" fill="none" className={className} aria-hidden="true">
+    {[0,2,4,6,8,10,12].map(y => (
+      <rect key={`s${y}`} x="0" y={y * (16/13)} width="24" height={16/13} fill="currentColor" opacity="0.35" />
+    ))}
+    {[1,3,5,7,9,11].map(y => (
+      <rect key={`w${y}`} x="0" y={y * (16/13)} width="24" height={16/13} fill="currentColor" opacity="0.15" />
+    ))}
+    <rect x="0" y="0" width="10" height={16 * 7/13} rx="0.5" fill="currentColor" opacity="0.45" />
+  </svg>
+);
+
+// Format digits as (XXX) XXX-XXXX
+const formatPhoneNumber = (value) => {
+  const digits = value.replace(/\D/g, '').slice(0, 10);
+  if (digits.length === 0) return '';
+  if (digits.length <= 3) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+};
+
+const stripPhoneFormatting = (value) => value.replace(/\D/g, '');
+
 // Animated text component for PTI lookup steps
 const AnimatedStep = ({ text, isActive, isExiting }) => {
   return (
@@ -247,11 +271,12 @@ const CompleteProfile = () => {
         other_clubs: otherClubs,
         pti: pti ? parseFloat(pti) : null,
         pti_verified: ptiVerified,
-        phone: phone.trim() || null,
+        phone: stripPhoneFormatting(phone) || null,
       });
       navigate('/home');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to save profile');
+      const detail = err.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map(e => e.msg).join(', ') : 'Failed to save profile');
     } finally {
       setLoading(false);
     }
@@ -443,10 +468,24 @@ const CompleteProfile = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-emerald-600 to-emerald-800 flex items-center justify-center p-4">
-      <Card className="w-full max-w-lg" data-testid="complete-profile-card">
-        <CardHeader className="text-center">
-          <CardTitle>Complete Your Profile</CardTitle>
-          <CardDescription>
+      <div className="w-full max-w-lg flex flex-col items-center">
+        <div
+          className="mb-6 select-none"
+          style={{
+            fontSize: '3.5rem',
+            fontWeight: 900,
+            letterSpacing: '-0.04em',
+            lineHeight: 1,
+            color: 'rgba(255,255,255,0.12)',
+            textShadow: '0 2px 4px rgba(0,0,0,0.15), 0 -1px 0 rgba(255,255,255,0.08)',
+          }}
+        >
+          Find4th
+        </div>
+      <Card className="w-full" data-testid="complete-profile-card">
+        <CardHeader className="text-center pb-2">
+          <CardTitle className="text-2xl tracking-tight">Complete Your Profile</CardTitle>
+          <CardDescription className="text-sm">
             Tell us about yourself so we can find the right matches for you
           </CardDescription>
         </CardHeader>
@@ -712,14 +751,25 @@ const CompleteProfile = () => {
 
             <div className="space-y-2">
               <Label htmlFor="phone">Phone Number (optional)</Label>
-              <Input
-                id="phone"
-                type="tel"
-                placeholder="For SMS notifications"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                data-testid="phone-input"
-              />
+              <div className="flex h-9 w-full rounded-md border border-input bg-transparent shadow-sm transition-colors focus-within:ring-1 focus-within:ring-ring">
+                <div className="flex items-center gap-1.5 pl-3 pr-2 text-muted-foreground/70 select-none border-r border-input">
+                  <USFlag className="w-5 h-auto" />
+                  <span className="text-sm">+1</span>
+                </div>
+                <input
+                  id="phone"
+                  type="tel"
+                  placeholder="(234) 567-8910"
+                  value={phone}
+                  onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
+                  className="flex-1 bg-transparent px-3 py-1 text-base md:text-sm placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  data-testid="phone-input"
+                />
+              </div>
+              <p className="text-xs text-gray-500 flex items-start gap-1">
+                <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                Add mobile number to enable instant SMS notifications for game &amp; player requests. Managed in profile settings.
+              </p>
             </div>
           </CardContent>
           <CardFooter>
@@ -741,6 +791,7 @@ const CompleteProfile = () => {
           </CardFooter>
         </form>
       </Card>
+      </div>
     </div>
   );
 };
