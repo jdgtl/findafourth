@@ -57,11 +57,11 @@ const Crews = () => {
         ) : crews.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center">
-              <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500 dark:text-gray-400">
+              <Users className="w-12 h-12 text-emerald-400/30 mx-auto mb-4" />
+              <p className="text-warm-muted">
                 No crews yet
               </p>
-              <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+              <p className="text-sm text-frost/50 mt-1">
                 Create a crew to organize players for quick game requests
               </p>
             </CardContent>
@@ -90,14 +90,14 @@ const CrewCard = ({ crew, onClick }) => (
   >
     <CardContent className="p-4">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center">
-          <Users className="w-5 h-5 text-emerald-600" />
+        <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-400/10 flex items-center justify-center">
+          <Users className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
         </div>
         <div>
-          <h3 className="font-semibold text-gray-900 dark:text-white">
+          <h3 className="font-semibold text-gray-900 dark:text-warm">
             {crew.name}
           </h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-gray-500 dark:text-warm-muted">
             {crew.member_count} player{crew.member_count !== 1 ? 's' : ''}
           </p>
         </div>

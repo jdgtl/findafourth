@@ -105,8 +105,12 @@ const AppLayout = ({ children }) => {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-6 pb-24 md:pb-6">
-        {children}
+      <main className="relative overflow-hidden" style={{ background: 'linear-gradient(180deg, #0a0f1a 0%, #0d1b2a 100%)', minHeight: 'calc(100vh - 4rem)' }}>
+        {/* Subtle ambient glow */}
+        <div className="absolute top-0 right-0 w-96 h-96 pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(52,211,153,0.05) 0%, transparent 70%)', filter: 'blur(60px)' }} />
+        <div className="container mx-auto px-4 py-6 pb-24 md:pb-6 relative">
+          {children}
+        </div>
       </main>
 
       {/* Mobile Bottom Navigation */}

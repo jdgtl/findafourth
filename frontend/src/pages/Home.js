@@ -97,7 +97,7 @@ const Home = () => {
         {/* My Active Requests (games I'm organizing) */}
         {myRequests.length > 0 && (
           <section>
-            <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            <h2 className="text-lg font-semibold text-warm-muted mb-3">
               My Requests
             </h2>
             <div className="space-y-3">
@@ -116,8 +116,8 @@ const Home = () => {
         {/* My Games (games I've joined) */}
         {myGames.length > 0 && (
           <section>
-            <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-              <CalendarCheck className="w-5 h-5 text-emerald-600" />
+            <h2 className="text-lg font-semibold text-warm-muted mb-3 flex items-center gap-2">
+              <CalendarCheck className="w-5 h-5 text-emerald-400" />
               My Games
             </h2>
             <div className="space-y-3">
@@ -136,7 +136,7 @@ const Home = () => {
 
         {/* Open Games (games I can join) */}
         <section>
-          <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-3">
+          <h2 className="text-lg font-semibold text-warm-muted mb-3">
             Open Games
           </h2>
           {loading ? (
@@ -154,11 +154,11 @@ const Home = () => {
           ) : openGames.length === 0 ? (
             <Card>
               <CardContent className="p-8 text-center">
-                <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 dark:text-gray-400">
+                <Users className="w-12 h-12 text-emerald-400/30 mx-auto mb-4" />
+                <p className="text-warm-muted">
                   No open games right now
                 </p>
-                <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+                <p className="text-sm text-frost/50 mt-1">
                   Create a request to find players!
                 </p>
               </CardContent>
@@ -183,7 +183,7 @@ const Home = () => {
         <Collapsible open={availabilityOpen} onOpenChange={setAvailabilityOpen}>
           <CollapsibleTrigger asChild>
             <Button variant="ghost" className="w-full justify-between p-0 h-auto">
-              <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300">
+              <h2 className="text-lg font-semibold text-warm-muted">
                 Available Players ({availability.length})
               </h2>
               {availabilityOpen ? (
@@ -197,7 +197,7 @@ const Home = () => {
             {availability.length === 0 ? (
               <Card>
                 <CardContent className="p-6 text-center">
-                  <p className="text-gray-500 dark:text-gray-400">
+                  <p className="text-warm-muted">
                     No one has posted availability yet
                   </p>
                 </CardContent>

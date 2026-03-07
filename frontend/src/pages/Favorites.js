@@ -192,11 +192,11 @@ const Favorites = () => {
         ) : favorites.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center">
-              <Star className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500 dark:text-gray-400">
+              <Star className="w-12 h-12 text-emerald-400/30 mx-auto mb-4" />
+              <p className="text-warm-muted">
                 No favorites yet
               </p>
-              <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+              <p className="text-sm text-frost/50 mt-1">
                 Add players you frequently play with for quick access
               </p>
             </CardContent>
@@ -210,12 +210,12 @@ const Favorites = () => {
                     <div className="flex items-center gap-3">
                       <Avatar>
                         <AvatarImage src={getProfileImageUrl(fav.profile_image_url)} />
-                        <AvatarFallback className="bg-emerald-100 text-emerald-700">
+                        <AvatarFallback className="bg-emerald-100 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-400">
                           {getInitials(fav.name)}
                         </AvatarFallback>
                       </Avatar>
                       <div>
-                        <p className="font-medium text-gray-900 dark:text-white">
+                        <p className="font-medium text-gray-900 dark:text-warm">
                           {fav.name}
                         </p>
                         <div className="flex items-center gap-2 text-sm text-gray-500">
