@@ -6,8 +6,8 @@ test.describe('Authentication', () => {
   });
 
   test('landing page loads correctly', async ({ page }) => {
-    await expect(page.getByText('Find4th')).toBeVisible();
-    await expect(page.getByRole('button', { name: /get started/i })).toBeVisible();
+    await expect(page.getByRole('navigation').getByText('Find4th')).toBeVisible();
+    await expect(page.getByRole('navigation').getByRole('button', { name: /get started/i })).toBeVisible();
   });
 
   test('can navigate to login page', async ({ page }) => {
@@ -17,7 +17,7 @@ test.describe('Authentication', () => {
   });
 
   test('can navigate to signup page', async ({ page }) => {
-    await page.getByRole('button', { name: /get started/i }).click();
+    await page.getByRole('navigation').getByRole('button', { name: /get started/i }).click();
     await expect(page).toHaveURL('/signup');
   });
 

@@ -118,14 +118,14 @@ const RequestCard = ({ request, isOrganizer, myResponse, onRespond, onClick }) =
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             {/* Time */}
-            <div className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
-              <Clock className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-warm">
+              <Clock className="w-4 h-4 text-emerald-400 flex-shrink-0" />
               {getTimeDisplay(request.date_time)}
               {getStatusBadge()}
             </div>
 
             {/* Club */}
-            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-warm-muted mt-1">
               <MapPin className="w-4 h-4 flex-shrink-0" />
               <span className="truncate">
                 {request.club}
@@ -152,7 +152,7 @@ const RequestCard = ({ request, isOrganizer, myResponse, onRespond, onClick }) =
                   {getInitials(request.organizer?.name)}
                 </AvatarFallback>
               </Avatar>
-              <span className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="text-sm text-gray-600 dark:text-warm-muted">
                 {isOrganizer ? 'You' : request.organizer?.name || 'Unknown'}
               </span>
             </div>
@@ -183,8 +183,8 @@ const RequestCard = ({ request, isOrganizer, myResponse, onRespond, onClick }) =
 
         {/* Expanded Details */}
         {expanded && request.notes && (
-          <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+          <div className="mt-3 pt-3 border-t border-gray-200 dark:border-white/[0.06]">
+            <p className="text-sm text-gray-600 dark:text-warm-muted">
               {request.notes}
             </p>
           </div>

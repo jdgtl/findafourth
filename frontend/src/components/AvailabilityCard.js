@@ -34,15 +34,15 @@ const AvailabilityCard = ({ post, onInvite, isOwn }) => {
           <div className="flex items-start gap-3">
             <Avatar className="w-10 h-10">
               <AvatarImage src={getProfileImageUrl(post.player?.profile_image_url)} />
-              <AvatarFallback className="bg-emerald-100 text-emerald-700">
+              <AvatarFallback className="bg-emerald-100 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-400">
                 {getInitials(post.player?.name)}
               </AvatarFallback>
             </Avatar>
             <div>
-              <p className="font-medium text-gray-900 dark:text-white">
+              <p className="font-medium text-gray-900 dark:text-warm">
                 {post.player?.name || 'Unknown Player'}
               </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              <p className="text-sm text-gray-600 dark:text-warm-muted mt-1">
                 {post.message}
               </p>
               <div className="flex flex-wrap items-center gap-2 mt-2">

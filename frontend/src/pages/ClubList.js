@@ -188,8 +188,8 @@ const ClubList = () => {
             ) : (
               <Card>
                 <CardContent className="p-8 text-center">
-                  <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500 dark:text-gray-400">
+                  <Building2 className="w-12 h-12 text-emerald-400/30 mx-auto mb-4" />
+                  <p className="text-warm-muted">
                     {hasActiveFilters ? 'No clubs match your filters' : 'No clubs found'}
                   </p>
                   {hasActiveFilters && (
@@ -227,7 +227,7 @@ const MyClubHeroCard = ({ club, onClick }) => {
     >
       <div className="flex items-center gap-2 mb-2">
         <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+        <span className="text-sm font-semibold text-gray-700 dark:text-warm-muted">
           My Club
         </span>
       </div>
@@ -237,7 +237,7 @@ const MyClubHeroCard = ({ club, onClick }) => {
             <Building2 className="w-7 h-7 text-amber-700 dark:text-amber-200" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white truncate">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-warm truncate">
               {club.name}
             </h2>
             {(club.league || (club.divisions && club.divisions.length > 0)) && (
@@ -263,7 +263,7 @@ const MyClubHeroCard = ({ club, onClick }) => {
               <Users className="w-4.5 h-4.5 text-amber-700 dark:text-amber-300" />
             </div>
             <div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white leading-none">
+              <div className="text-2xl font-bold text-gray-900 dark:text-warm leading-none">
                 {memberCount}
               </div>
               <div className="text-xs text-amber-700/70 dark:text-amber-400/70 mt-0.5">
@@ -276,7 +276,7 @@ const MyClubHeroCard = ({ club, onClick }) => {
               <UserCheck className="w-4.5 h-4.5 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white leading-none">
+              <div className="text-2xl font-bold text-gray-900 dark:text-warm leading-none">
                 {registeredCount}
               </div>
               <div className="text-xs text-amber-700/70 dark:text-amber-400/70 mt-0.5">
@@ -323,11 +323,11 @@ const ClubCard = ({ club, onClick }) => {
         <CardContent className="p-5">
           {/* Header */}
           <div className="flex items-start gap-3">
-            <div className="w-11 h-11 rounded-xl bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-emerald-100 dark:bg-emerald-400/10 flex items-center justify-center shrink-0">
               <Building2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white truncate">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-warm truncate">
                 {club.name}
               </h3>
               {(club.league || visibleDivisions.length > 0) && (
