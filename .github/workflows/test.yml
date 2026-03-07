@@ -209,8 +209,8 @@ jobs:
 
   intelligent-agent:
     name: Claude Test Agent
-    needs: [analyze]
-    if: needs.analyze.outputs.run_e2e == 'true'
+    needs: [analyze, unit-tests, e2e-tests]
+    if: always() && needs.analyze.outputs.run_e2e == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -225,6 +225,13 @@ jobs:
       - name: Install agent dependencies
         run: pip install anthropic
 
+      - name: Download E2E reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: playwright-report-shard-*
+          path: e2e-reports
+        continue-on-error: true
+
       - name: Determine base ref
         id: base
         run: |
@@ -234,11 +241,20 @@ jobs:
             echo "ref=HEAD~1" >> $GITHUB_OUTPUT
           fi
 
+      - name: Collect test results
+        id: results
+        run: |
+          echo "unit_result=${{ needs.unit-tests.result }}" >> $GITHUB_OUTPUT
+          echo "e2e_result=${{ needs.e2e-tests.result }}" >> $GITHUB_OUTPUT
+
       - name: Run Intelligent Test Agent
         run: |
           python scripts/intelligent_test_agent.py \
             --base-ref ${{ steps.base.outputs.ref }} \
             --skip-e2e \
+            --e2e-results-dir e2e-reports \
+            --unit-result ${{ steps.results.outputs.unit_result }} \
+            --e2e-result ${{ steps.results.outputs.e2e_result }} \
             --output test-agent-report.md
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_NA4 }}

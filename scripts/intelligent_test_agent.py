@@ -259,11 +259,57 @@ Respond ONLY with valid JSON.
         return {"error": "Failed to parse response"}
 
 
+def parse_playwright_results(results_dir: str) -> dict:
+    """Parse Playwright HTML/JSON reports from E2E shard artifacts."""
+    results = {"passed": [], "failed": [], "errors": []}
+
+    results_path = Path(results_dir)
+    if not results_path.exists():
+        return results
+
+    # Look for JSON results in the report directories
+    for report_dir in sorted(results_path.iterdir()):
+        if not report_dir.is_dir():
+            continue
+
+        # Check for test-results with failure artifacts
+        for item in report_dir.rglob("test-failed-*.png"):
+            # Extract test name from directory structure
+            test_dir = item.parent.name
+            results["failed"].append({
+                "file": test_dir,
+                "output": f"Screenshot: {item.name}",
+            })
+
+        # Check for error context files
+        for ctx_file in report_dir.rglob("error-context.md"):
+            test_dir = ctx_file.parent.name
+            try:
+                error_text = ctx_file.read_text()[:3000]
+            except Exception:
+                error_text = "Could not read error context"
+            # Update existing failure or add new one
+            found = False
+            for f in results["failed"]:
+                if f["file"] == test_dir:
+                    f["output"] = error_text
+                    found = True
+                    break
+            if not found:
+                results["failed"].append({
+                    "file": test_dir,
+                    "output": error_text,
+                })
+
+    return results
+
+
 def generate_report(
     analysis: dict,
     unit_results: dict,
     e2e_results: dict,
     failure_analysis: list[dict],
+    ci_results: Optional[dict] = None,
 ) -> str:
     """Generate a markdown report of the test run."""
 
@@ -279,7 +325,16 @@ Generated: {datetime.now().isoformat()}
 
 ## Test Results
 
-### Unit Tests
+"""
+
+    if ci_results:
+        report += f"""### CI Pipeline Results
+- **Unit Tests**: {ci_results.get('unit_result', 'skipped')}
+- **E2E Tests**: {ci_results.get('e2e_result', 'skipped')}
+
+"""
+    else:
+        report += f"""### Unit Tests
 - Passed: {len(unit_results['passed'])}
 - Failed: {len(unit_results['failed'])}
 - Errors: {len(unit_results['errors'])}
@@ -315,8 +370,11 @@ def main():
     parser.add_argument("--base-ref", default="HEAD~1", help="Git ref to compare against")
     parser.add_argument("--fix", action="store_true", help="Attempt to fix failures")
     parser.add_argument("--max-retries", type=int, default=3, help="Max fix attempts")
-    parser.add_argument("--skip-e2e", action="store_true", help="Skip E2E tests")
+    parser.add_argument("--skip-e2e", action="store_true", help="Skip running E2E tests (use CI results instead)")
     parser.add_argument("--skip-unit", action="store_true", help="Skip unit tests")
+    parser.add_argument("--e2e-results-dir", default=None, help="Path to downloaded E2E report artifacts")
+    parser.add_argument("--unit-result", default=None, help="CI unit test job result (success/failure/skipped)")
+    parser.add_argument("--e2e-result", default=None, help="CI E2E test job result (success/failure/skipped)")
     parser.add_argument("--output", default="test-report.md", help="Report output file")
     args = parser.parse_args()
 
@@ -370,25 +428,41 @@ def main():
             analysis["e2e_tests"].extend(config.get("e2e", []))
             analysis["unit_tests"].extend(config.get("unit", []))
 
-    # Run tests
+    # Collect test results
     unit_results = {"passed": [], "failed": [], "errors": []}
     e2e_results = {"passed": [], "failed": [], "errors": []}
     failure_analysis = []
+    ci_results = None
 
-    if not args.skip_unit and analysis.get("unit_tests"):
-        print(f"\n🧪 Running {len(analysis['unit_tests'])} unit tests...")
-        unit_results = run_tests("unit", analysis["unit_tests"], frontend_dir)
-        print(f"Unit tests: {len(unit_results['passed'])} passed, {len(unit_results['failed'])} failed")
+    # Check if we have CI pipeline results to incorporate
+    if args.unit_result or args.e2e_result:
+        ci_results = {
+            "unit_result": args.unit_result or "skipped",
+            "e2e_result": args.e2e_result or "skipped",
+        }
+        print(f"CI results - Unit: {ci_results['unit_result']}, E2E: {ci_results['e2e_result']}")
 
-    if not args.skip_e2e and analysis.get("e2e_tests"):
-        print(f"\n🎭 Running {len(analysis['e2e_tests'])} E2E tests...")
-        e2e_results = run_tests("e2e", analysis["e2e_tests"], frontend_dir)
-        print(f"E2E tests: {len(e2e_results['passed'])} passed, {len(e2e_results['failed'])} failed")
+        # Parse E2E failure artifacts if E2E failed and we have reports
+        if args.e2e_result == "failure" and args.e2e_results_dir:
+            print(f"\n🔍 Parsing E2E failure artifacts from {args.e2e_results_dir}...")
+            e2e_results = parse_playwright_results(args.e2e_results_dir)
+            print(f"Found {len(e2e_results['failed'])} E2E failures in artifacts")
+    else:
+        # Run tests directly (local mode)
+        if not args.skip_unit and analysis.get("unit_tests"):
+            print(f"\n🧪 Running {len(analysis['unit_tests'])} unit tests...")
+            unit_results = run_tests("unit", analysis["unit_tests"], frontend_dir)
+            print(f"Unit tests: {len(unit_results['passed'])} passed, {len(unit_results['failed'])} failed")
 
-    # Analyze failures
+        if not args.skip_e2e and analysis.get("e2e_tests"):
+            print(f"\n🎭 Running {len(analysis['e2e_tests'])} E2E tests...")
+            e2e_results = run_tests("e2e", analysis["e2e_tests"], frontend_dir)
+            print(f"E2E tests: {len(e2e_results['passed'])} passed, {len(e2e_results['failed'])} failed")
+
+    # Analyze failures with Claude
     all_failures = unit_results["failed"] + e2e_results["failed"]
     if all_failures:
-        print(f"\n🔬 Analyzing {len(all_failures)} failures...")
+        print(f"\n🔬 Analyzing {len(all_failures)} failures with Claude...")
         for failure in all_failures[:5]:  # Limit analysis
             try:
                 fa = analyze_failure_and_suggest_fix(
@@ -404,7 +478,7 @@ def main():
 
     # Generate report
     print("\n📝 Generating report...")
-    report = generate_report(analysis, unit_results, e2e_results, failure_analysis)
+    report = generate_report(analysis, unit_results, e2e_results, failure_analysis, ci_results)
 
     report_path = project_root / args.output
     with open(report_path, "w") as f:
@@ -412,11 +486,14 @@ def main():
     print(f"Report saved to {report_path}")
 
     # Exit with appropriate code
+    has_ci_failures = ci_results and (
+        ci_results.get("e2e_result") == "failure" or ci_results.get("unit_result") == "failure"
+    )
     total_failures = len(unit_results["failed"]) + len(e2e_results["failed"])
     total_errors = len(unit_results["errors"]) + len(e2e_results["errors"])
 
-    if total_failures > 0 or total_errors > 0:
-        print(f"\n❌ Tests failed: {total_failures} failures, {total_errors} errors")
+    if has_ci_failures or total_failures > 0 or total_errors > 0:
+        print(f"\n❌ Tests failed")
         sys.exit(1)
     else:
         print("\n✅ All tests passed!")
