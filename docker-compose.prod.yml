@@ -11,10 +11,13 @@ services:
       - MONGO_INITDB_DATABASE=findafourth
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
+    labels:
+      - "autoheal=true"
 
   backend:
     image: ghcr.io/jdgtl/findafourth/backend:latest
@@ -35,6 +38,17 @@ services:
     # Production: no --reload, use multiple workers
     command: uvicorn server:app --host 0.0.0.0 --port 8000 --workers 2
     restart: unless-stopped
+
+  autoheal:
+    image: willfarrell/autoheal
+    container_name: findafourth-autoheal
+    restart: always
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+      - AUTOHEAL_INTERVAL=60
+      - AUTOHEAL_START_PERIOD=120
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   mongodb_data:
