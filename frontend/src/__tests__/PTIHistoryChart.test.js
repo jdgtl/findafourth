@@ -61,7 +61,7 @@ describe('PTIHistoryChart', () => {
     });
   });
 
-  test('shows improving trend badge when PTI decreased', async () => {
+  test('shows trend badge with change amount when PTI decreased', async () => {
     ptiAPI.getHistory.mockResolvedValue({
       data: {
         history: [
@@ -74,7 +74,7 @@ describe('PTIHistoryChart', () => {
     render(<PTIHistoryChart playerName="Test Player" currentPti={40} />);
 
     await waitFor(() => {
-      expect(screen.getByText(/improved/i)).toBeInTheDocument();
+      expect(screen.getByText('10.0')).toBeInTheDocument();
     });
   });
 

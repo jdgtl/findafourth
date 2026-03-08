@@ -3,7 +3,7 @@ import { ptiAPI } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { TrendingDown, TrendingUp, Minus, Trophy, AlertCircle } from 'lucide-react';
+import { TrendingDown, TrendingUp, Trophy, AlertCircle } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -65,7 +65,7 @@ const PTIHistoryChart = ({ playerName, currentPti }) => {
     fetchHistory();
   }, [playerName, currentPti]);
 
-  // Calculate trend
+  // Calculate trend (lower PTI = better)
   const getTrend = () => {
     if (history.length < 2) return null;
 
@@ -73,13 +73,13 @@ const PTIHistoryChart = ({ playerName, currentPti }) => {
     const last = history[history.length - 1].pti;
     const change = last - first;
 
-    // Lower PTI is better, so negative change is improvement
-    if (change < -1) {
-      return { direction: 'improving', change: Math.abs(change).toFixed(1) };
-    } else if (change > 1) {
-      return { direction: 'declining', change: Math.abs(change).toFixed(1) };
-    }
-    return { direction: 'stable', change: '0' };
+    if (Math.abs(change) < 0.05) return null;
+
+    // Negative change = PTI went down = improving
+    return {
+      improving: change < 0,
+      change: Math.abs(change).toFixed(1),
+    };
   };
 
   const trend = getTrend();
@@ -137,13 +137,15 @@ const PTIHistoryChart = ({ playerName, currentPti }) => {
     );
   }
 
-  // Calculate Y-axis domain
+  // Calculate Y-axis domain with 0.1-point granularity
   const ptiValues = history.map((h) => h.pti);
   const minPti = Math.min(...ptiValues);
   const maxPti = Math.max(...ptiValues);
-  const padding = Math.max(2, (maxPti - minPti) * 0.1);
-  const yMin = Math.floor(minPti - padding);
-  const yMax = Math.ceil(maxPti + padding);
+  const range = maxPti - minPti;
+  // Pad by 0.2 minimum so small movements are visible
+  const padding = Math.max(0.2, range * 0.15);
+  const yMin = Math.floor((minPti - padding) * 10) / 10;
+  const yMax = Math.ceil((maxPti + padding) * 10) / 10;
 
   // Custom tooltip
   const CustomTooltip = ({ active, payload }) => {
@@ -171,23 +173,17 @@ const PTIHistoryChart = ({ playerName, currentPti }) => {
             <Badge
               variant="secondary"
               className={
-                trend.direction === 'improving'
+                trend.improving
                   ? 'bg-emerald-100 dark:bg-emerald-400/10 text-emerald-700 dark:text-emerald-400'
-                  : trend.direction === 'declining'
-                  ? 'bg-red-100 dark:bg-red-400/10 text-red-700 dark:text-red-400'
-                  : 'bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-warm-muted'
+                  : 'bg-red-100 dark:bg-red-400/10 text-red-700 dark:text-red-400'
               }
             >
-              {trend.direction === 'improving' ? (
-                <TrendingDown className="w-3 h-3 mr-1" />
-              ) : trend.direction === 'declining' ? (
+              {trend.improving ? (
                 <TrendingUp className="w-3 h-3 mr-1" />
               ) : (
-                <Minus className="w-3 h-3 mr-1" />
+                <TrendingDown className="w-3 h-3 mr-1" />
               )}
-              {trend.direction === 'stable'
-                ? 'Stable'
-                : `${trend.direction === 'improving' ? 'Improved' : 'Up'} ${trend.change}`}
+              {trend.change}
             </Badge>
           )}
         </div>
@@ -204,9 +200,11 @@ const PTIHistoryChart = ({ playerName, currentPti }) => {
               />
               <YAxis
                 domain={[yMin, yMax]}
-                tick={{ fontSize: 12 }}
+                tick={{ fontSize: 11 }}
                 tickLine={false}
                 axisLine={false}
+                tickFormatter={(v) => v.toFixed(1)}
+                tickCount={Math.min(8, Math.round((yMax - yMin) / 0.1) + 1)}
                 reversed // Lower PTI is better, so reverse axis
               />
               <Tooltip content={<CustomTooltip />} />

@@ -11,7 +11,6 @@ import {
   Users,
   TrendingUp,
   TrendingDown,
-  Minus,
   RefreshCw,
   Loader2,
   Trophy,
@@ -81,21 +80,20 @@ const PartnerChemistry = ({ playerId, playerName }) => {
       .slice(0, 2);
   };
 
-  const getTrendIcon = () => {
+  const getTrendDisplay = () => {
     if (!ptiTrend || ptiTrend.diff === null) return null;
     const diff = ptiTrend.diff;
-    // Lower PTI is better, so negative diff means improvement
-    if (diff < -1) return <TrendingUp className="w-4 h-4 text-emerald-600" />;
-    if (diff > 1) return <TrendingDown className="w-4 h-4 text-red-500" />;
-    return <Minus className="w-4 h-4 text-gray-400" />;
-  };
-
-  const getTrendLabel = () => {
-    if (!ptiTrend || ptiTrend.diff === null) return null;
-    const diff = ptiTrend.diff;
-    if (diff < -1) return 'Improving';
-    if (diff > 1) return 'Declining';
-    return 'Stable';
+    // Lower PTI is better, so negative diff = improving = trending up
+    const improving = diff < 0;
+    const absDiff = Math.abs(diff);
+    if (absDiff < 0.05) return null;
+    return {
+      icon: improving
+        ? <TrendingUp className="w-4 h-4 text-emerald-500" />
+        : <TrendingDown className="w-4 h-4 text-red-500" />,
+      colorClass: improving ? 'text-emerald-500' : 'text-red-500',
+      change: absDiff.toFixed(1),
+    };
   };
 
   if (loading) {
@@ -159,30 +157,26 @@ const PartnerChemistry = ({ playerId, playerName }) => {
 
         {/* PTI Trend */}
         {ptiTrend && ptiTrend.current !== null && (
-          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-white/5 rounded-lg">
             <div className="flex items-center gap-2">
               <Trophy className="w-5 h-5 text-amber-500" />
               <div>
-                <span className="text-sm text-gray-500">Season PTI</span>
+                <span className="text-sm text-gray-500 dark:text-warm-muted">Season PTI</span>
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-lg">{ptiTrend.current}</span>
                   {ptiTrend.start !== null && (
-                    <span className="text-sm text-gray-400">
+                    <span className="text-sm text-gray-400 dark:text-warm-muted">
                       from {ptiTrend.start}
                     </span>
                   )}
                 </div>
               </div>
             </div>
-            {getTrendIcon() && (
-              <div className="flex items-center gap-1 text-sm">
-                {getTrendIcon()}
-                <span className={`
-                  ${ptiTrend.diff < -1 ? 'text-emerald-600' : ''}
-                  ${ptiTrend.diff > 1 ? 'text-red-500' : ''}
-                  ${Math.abs(ptiTrend.diff) <= 1 ? 'text-gray-500' : ''}
-                `}>
-                  {getTrendLabel()}
+            {getTrendDisplay() && (
+              <div className="flex items-center gap-1">
+                {getTrendDisplay().icon}
+                <span className={`text-sm font-medium ${getTrendDisplay().colorClass}`}>
+                  {getTrendDisplay().change}
                 </span>
               </div>
             )}
